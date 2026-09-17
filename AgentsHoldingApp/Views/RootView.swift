@@ -37,6 +37,11 @@ struct SidebarView: View {
                 Button("Holding") { appModel.backToHolding() }
                 Button("Usage") { appModel.selection = .usage }
             }
+            Section("Actions") {
+                Text("Add company: nút + trên Holding (Browse folder).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             if let holding = appModel.holding {
                 Section("Companies") {

@@ -3,6 +3,7 @@ import SwiftUI
 /// Holding home: companies + holding personnel (teams/staffs).
 struct HoldingCanvasView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var showAddCompany = false
 
     var body: some View {
         Group {
@@ -26,6 +27,20 @@ struct HoldingCanvasView: View {
             }
         }
         .navigationTitle(appModel.holding?.name ?? "Holding")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAddCompany = true
+                } label: {
+                    Label("Add company", systemImage: "plus")
+                }
+                .help("Chọn folder để cài / đăng ký company")
+            }
+        }
+        .sheet(isPresented: $showAddCompany) {
+            AddCompanySheet()
+                .environmentObject(appModel)
+        }
     }
 
     private var columns: [GridItem] {
@@ -48,10 +63,19 @@ struct HoldingCanvasView: View {
     @ViewBuilder
     private func companiesSection(_ holding: HoldingSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Companies", systemImage: "building.2")
-                .font(.headline)
+            HStack {
+                Label("Companies", systemImage: "building.2")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showAddCompany = true
+                } label: {
+                    Label("Add", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderless)
+            }
             if holding.companies.isEmpty {
-                Text("No companies in registry. Run company_registry.py scan --register")
+                Text("Chưa có company — bấm Add để chọn folder và cài đặt.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
