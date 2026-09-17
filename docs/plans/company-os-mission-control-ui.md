@@ -71,12 +71,20 @@ Trong company hiện:
 
 ### 3. Staff detail (holding hoặc company)
 
+**Nguyên tắc:** một staff **không** đọc / làm cả project. Họ chỉ được cấp:
+
+1. **Skills / nhiệm vụ hẹp** — ví dụ `devops` → CLI/pack/mpm; `git` → git gate; eng → đúng skill tree  
+2. **Path fence** — files/folders được phép (team RW + SCOPE / staff md)  
+3. **Org** — lead (cấp trên) + reports (cấp dưới họ quản)
+
+UI staff detail phải làm rõ hai lớp giới hạn đó (task/skill + filesystem), không tạo cảm giác “full repo access”.
+
 | Section | Content |
 | --- | --- |
 | Identity | name, mô tả/blurb, tier, permission / capability |
 | Org | lead (parent staff), direct reports (có hoặc không) |
-| Skills | skill column / customs + defaults |
-| Access scope | files/folders được phép (GRANTS / hop scope — P0 best-effort nếu SoT còn rời) |
+| Skills | list skill id — **bấm đọc** `SKILL.md` (đây là biên nhiệm vụ) |
+| Access scope | files/folders được phép / must-not (SCOPE + staff fence) |
 | Worktrees | worktree đã/đang gắn (P0 có thể mỏng; P3 ledger đủ) |
 | Runtime profiles | bảng grok / codex / claude / **merge** (dưới) |
 

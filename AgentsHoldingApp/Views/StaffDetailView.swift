@@ -111,8 +111,11 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func scopeSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Giới hạn paths (được phép / không)", systemImage: "folder.badge.gearshape")
+            Label("Path fence (filesystem)", systemImage: "folder.badge.gearshape")
                 .font(.headline)
+            Text("Staff không đọc cả project — chỉ các path được cấp dưới đây (cộng với skills).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if detail.allowedPaths.isEmpty && detail.deniedHints.isEmpty {
                 Text("Chưa parse được path fence từ staff md / SCOPE.md — xem body bên dưới.")
@@ -150,11 +153,14 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func skillsSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Skills", systemImage: "book")
+            Label("Skills (biên nhiệm vụ)", systemImage: "book")
                 .font(.headline)
+            Text("Mỗi skill = phạm vi việc được làm (vd. devops → CLI; git → git). Bấm để đọc SKILL.md.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if detail.skills.isEmpty {
-                Text("Không có skill id trên agents.tsv")
+                Text("Không có skill id trên agents.tsv — staff có thể chỉ dựa path fence / brief.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
