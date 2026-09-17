@@ -64,27 +64,30 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func orgSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Org", systemImage: "arrow.up.arrow.down")
+            Label("Org (hop chain)", systemImage: "arrow.up.arrow.down")
                 .font(.headline)
+            Text("Cấp trên = staff có thể Assign/hop để ra lệnh cho người này. Cấp dưới = người này hop ra lệnh được.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             HStack(alignment: .top) {
-                Text("Lead (cấp trên)")
+                Text("Cấp trên (có thể hop → mình)")
                     .foregroundStyle(.secondary)
-                    .frame(width: 140, alignment: .leading)
+                    .frame(width: 200, alignment: .leading)
                 if let lead = detail.lead, !lead.isEmpty {
                     Text(lead)
                         .fontWeight(.semibold)
                 } else {
-                    Text("— (none / top)")
+                    Text("— (top dispatcher)")
                         .foregroundStyle(.tertiary)
                 }
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Reports (cấp dưới)")
+                Text("Cấp dưới (mình hop → họ)")
                     .foregroundStyle(.secondary)
                 if detail.reports.isEmpty {
-                    Text("Không quản lý staff nào")
+                    Text("Không hop xuống staff nào (leaf)")
                         .foregroundStyle(.tertiary)
                 } else {
                     ForEach(detail.reports) { report in

@@ -34,11 +34,11 @@ struct StaffDirectory {
         let node = allNodes.first { $0.name == name && $0.team == team }
             ?? StaffNode(name: name, team: team, blurb: row?.blurb ?? firstBlurb(body) ?? "")
 
-        let leadName = row?.lead.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lead = (leadName?.isEmpty == false) ? leadName : nil
+        // Cấp trên = who may Assign/hop to command this staff.
+        // agents.tsv `lead` when set; else company `ceo` / holding `holding-ceo` (tops have none).
+        let lead = resolveLead(name: name, row: row, agents: agents, companyRoot: companyRoot)
         let reports = allNodes.filter { staff in
-            guard let r = agents[staff.name] else { return false }
-            return r.lead == name
+            resolveLead(name: staff.name, row: agents[staff.name], agents: agents, companyRoot: companyRoot) == name
         }.sorted { $0.name < $1.name }
 
         let skillIDs = row?.skillIDs ?? []
@@ -63,6 +63,40 @@ struct StaffDirectory {
             bodyMarkdown: stripFrontmatter(body),
             companyRoot: companyRoot
         )
+    }
+
+    /// Who can hop/Assign orders to `name`.
+    private func resolveLead(
+        name: String,
+        row: AgentRow?,
+        agents: [String: AgentRow],
+        companyRoot: URL
+    ) -> String? {
+        let explicit = row?.lead.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !explicit.isEmpty { return explicit }
+
+        let top = topDispatcher(in: agents, companyRoot: companyRoot)
+        if name == top { return nil }
+
+        // Empty lead in TSV usually means “reports to company dispatcher” (ceo / holding-ceo),
+        // e.g. qc-lead, game-lead, ba-lead — ceo Assigns them; they Assign their ICs.
+        if agents[top] != nil || FileManager.default.fileExists(
+            atPath: companyRoot.appendingPathComponent("system/staffs/leadership/\(top).md").path
+        ) {
+            return top
+        }
+        return nil
+    }
+
+    private func topDispatcher(in agents: [String: AgentRow], companyRoot: URL) -> String {
+        if agents["holding-ceo"] != nil
+            || FileManager.default.fileExists(
+                atPath: companyRoot.appendingPathComponent("system/staffs/leadership/holding-ceo.md").path
+            )
+        {
+            return "holding-ceo"
+        }
+        return "ceo"
     }
 
     func loadAgentsTSV(companyRoot: URL) -> [String: AgentRow] {
