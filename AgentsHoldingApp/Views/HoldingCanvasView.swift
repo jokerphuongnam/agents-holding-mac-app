@@ -99,10 +99,10 @@ struct CompanyCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 if let root = company.projectRoot {
-                    Text(root.lastPathComponent)
+                    Text(root.path)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)

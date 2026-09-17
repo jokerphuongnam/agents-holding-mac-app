@@ -15,7 +15,7 @@ struct StaffNode: Identifiable, Hashable {
 }
 
 struct CompanyNode: Identifiable, Hashable {
-    /// Stable id from registry when present; else slug.
+    /// Registry id when present; otherwise `slug|projectRoot` (slug alone is not unique).
     var id: String
     var slug: String
     var displayName: String
@@ -37,7 +37,12 @@ struct CompanyNode: Identifiable, Hashable {
         topology: String = "",
         pointerPath: URL? = nil
     ) {
-        self.id = id ?? slug
+        if let id, !id.isEmpty, id != slug {
+            self.id = id
+        } else {
+            let rootKey = projectRoot?.path ?? companyPath?.path ?? ""
+            self.id = rootKey.isEmpty ? slug : "\(slug)|\(rootKey)"
+        }
         self.slug = slug
         self.displayName = displayName ?? slug.replacingOccurrences(of: "-company", with: "")
         self.projectRoot = projectRoot

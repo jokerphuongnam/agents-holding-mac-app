@@ -147,13 +147,16 @@ struct HoldingDiscovery {
                 arguments: ["scan", "--root", root, "--max-depth", "8"]
             ) else { continue }
             for company in parseScanTSV(output) {
-                let key = "\(company.slug)|\(company.projectRoot?.path ?? "")"
+                let key = companyIdentityKey(company)
                 if seen.insert(key).inserted {
                     found.append(company)
                 }
             }
         }
-        return found.sorted { $0.slug < $1.slug }
+        return found.sorted {
+            if $0.slug != $1.slug { return $0.slug < $1.slug }
+            return ($0.projectRoot?.path ?? "") < ($1.projectRoot?.path ?? "")
+        }
     }
 
     private func loadCompaniesFromChildrenDir(_ childrenDir: URL) -> [CompanyNode] {
@@ -183,13 +186,23 @@ struct HoldingDiscovery {
     }
 
     private func mergeCompanies(_ primary: [CompanyNode], _ secondary: [CompanyNode]) -> [CompanyNode] {
-        var bySlug = Dictionary(uniqueKeysWithValues: primary.map { ($0.slug, $0) })
-        for extra in secondary {
-            if bySlug[extra.slug] == nil {
-                bySlug[extra.slug] = extra
+        // Slug is NOT unique (same slug, different project_root forks). Key by stable id.
+        var byID: [String: CompanyNode] = [:]
+        for company in primary + secondary {
+            let key = companyIdentityKey(company)
+            if byID[key] == nil {
+                byID[key] = company
             }
         }
-        return bySlug.values.sorted { $0.slug < $1.slug }
+        return byID.values.sorted {
+            if $0.slug != $1.slug { return $0.slug < $1.slug }
+            return ($0.projectRoot?.path ?? "") < ($1.projectRoot?.path ?? "")
+        }
+    }
+
+    private func companyIdentityKey(_ company: CompanyNode) -> String {
+        if company.id != company.slug { return company.id }
+        return "\(company.slug)|\(company.projectRoot?.path ?? company.companyPath?.path ?? "")"
     }
 
     // MARK: - Python bridge
