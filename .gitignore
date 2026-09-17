@@ -1,5 +1,12 @@
-# Xcode
-AgentsHoldingApp.xcodeproj/
+# Xcode (generate via `xcodegen generate`; keep Package.resolved for SPM pins)
+AgentsHoldingApp.xcodeproj/*
+!AgentsHoldingApp.xcodeproj/project.xcworkspace/
+AgentsHoldingApp.xcodeproj/project.xcworkspace/*
+!AgentsHoldingApp.xcodeproj/project.xcworkspace/xcshareddata/
+AgentsHoldingApp.xcodeproj/project.xcworkspace/xcshareddata/*
+!AgentsHoldingApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+AgentsHoldingApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/*
+!AgentsHoldingApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 *.xcuserdata/
 xcuserdata/
 DerivedData/
