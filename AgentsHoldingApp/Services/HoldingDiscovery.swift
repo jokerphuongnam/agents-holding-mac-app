@@ -77,7 +77,7 @@ struct HoldingDiscovery {
             throw HoldingDiscoveryError.notAHolding(holdingRoot)
         }
 
-        let staffs = loadStaffs(under: root.appendingPathComponent("system/staffs"))
+        // Holding home = companies only (staffs live inside each company, under teams).
         var companies = loadCompaniesFromRegistry(holdingPackage: root)
 
         // If registry empty, fall back to scan (discover on disk without requiring prior register).
@@ -85,37 +85,15 @@ struct HoldingDiscovery {
             companies = loadCompaniesFromScan(holdingPackage: root)
         }
 
-        // Merge any on-disk children/ pointers (parent→child template layout), by slug.
+        // Holding itself usually has no children/; keep merge for edge layouts.
         let diskChildren = loadCompaniesFromChildrenDir(root.appendingPathComponent("children"))
         companies = mergeCompanies(companies, diskChildren)
 
         return HoldingSnapshot(
             path: holdingRoot,
             name: holdingRoot.lastPathComponent,
-            staffs: staffs,
             companies: companies
         )
-    }
-
-    // MARK: - Staffs
-
-    private func loadStaffs(under staffsDir: URL) -> [StaffNode] {
-        guard let enumerator = FileManager.default.enumerator(
-            at: staffsDir,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        var out: [StaffNode] = []
-        for case let fileURL as URL in enumerator {
-            guard fileURL.pathExtension == "md" else { continue }
-            let name = fileURL.deletingPathExtension().lastPathComponent
-            if name == "ORG" { continue }
-            let group = fileURL.deletingLastPathComponent().lastPathComponent
-            let blurb = firstBlurb(in: fileURL) ?? ""
-            out.append(StaffNode(name: name, blurb: blurb, group: group))
-        }
-        return out.sorted { $0.name < $1.name }
     }
 
     // MARK: - Companies (registry SoT)
@@ -147,7 +125,7 @@ struct HoldingDiscovery {
                 arguments: ["scan", "--root", root, "--max-depth", "8"]
             ) else { continue }
             for company in parseScanTSV(output) {
-                let key = companyIdentityKey(company)
+                let key = publicIdentityKey(company)
                 if seen.insert(key).inserted {
                     found.append(company)
                 }
@@ -189,7 +167,7 @@ struct HoldingDiscovery {
         // Slug is NOT unique (same slug, different project_root forks). Key by stable id.
         var byID: [String: CompanyNode] = [:]
         for company in primary + secondary {
-            let key = companyIdentityKey(company)
+            let key = publicIdentityKey(company)
             if byID[key] == nil {
                 byID[key] = company
             }
@@ -200,7 +178,8 @@ struct HoldingDiscovery {
         }
     }
 
-    private func companyIdentityKey(_ company: CompanyNode) -> String {
+    /// Registry id when present; else `slug|projectRoot` (slug alone is not unique).
+    func publicIdentityKey(_ company: CompanyNode) -> String {
         if company.id != company.slug { return company.id }
         return "\(company.slug)|\(company.projectRoot?.path ?? company.companyPath?.path ?? "")"
     }
@@ -299,15 +278,4 @@ struct HoldingDiscovery {
         return FileManager.default.fileExists(atPath: pointer.path) ? pointer : nil
     }
 
-    private func firstBlurb(in fileURL: URL) -> String? {
-        guard let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return nil }
-        for line in text.components(separatedBy: .newlines) {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty || t.hasPrefix("---") || t.hasPrefix("#") || t.hasPrefix("name:") { continue }
-            if t.hasPrefix("**") || t.count > 24 {
-                return String(t.prefix(140))
-            }
-        }
-        return nil
-    }
 }

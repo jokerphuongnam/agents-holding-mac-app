@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// P0 org canvas: staff + company nodes (list-as-canvas scaffold; diagram layout later).
+/// Holding home: **companies only** (staffs/teams live inside each company).
 struct HoldingCanvasView: View {
     @EnvironmentObject private var appModel: AppModel
 
     var body: some View {
         Group {
-            if let error = appModel.lastError {
+            if let error = appModel.lastError, appModel.holding == nil {
                 ContentUnavailableView(
                     "Holding not found",
                     systemImage: "building.columns",
@@ -17,27 +17,18 @@ struct HoldingCanvasView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         header(holding)
 
-                        nodeSection(title: "Companies", systemImage: "building.2") {
-                            if holding.companies.isEmpty {
-                                Text("No companies in registry. Run: python3 holding/system/install/company_registry.py scan --register")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                LazyVGrid(columns: columns, spacing: 12) {
-                                    ForEach(holding.companies) { company in
-                                        CompanyCard(company: company) {
-                                            appModel.openCompany(company)
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        Label("Companies", systemImage: "building.2")
+                            .font(.headline)
 
-                        nodeSection(title: "Staff", systemImage: "person.3") {
+                        if holding.companies.isEmpty {
+                            Text("No companies in registry. Run: python3 holding/system/install/company_registry.py scan --register")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
                             LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(holding.staffs) { staff in
-                                    StaffCard(staff: staff) {
-                                        appModel.openStaff(staff)
+                                ForEach(holding.companies) { company in
+                                    CompanyCard(company: company) {
+                                        appModel.openCompanyNode(company)
                                     }
                                 }
                             }
@@ -63,21 +54,9 @@ struct HoldingCanvasView: View {
             Text(holding.path.path)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("\(holding.companies.count) companies · \(holding.staffs.count) staff")
+            Text("\(holding.companies.count) companies")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    private func nodeSection<Content: View>(
-        title: String,
-        systemImage: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-            content()
         }
     }
 }
@@ -108,36 +87,6 @@ struct CompanyCard: View {
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
             .padding(12)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct StaffCard: View {
-    let staff: StaffNode
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: "person.fill")
-                    .font(.title2)
-                Text(staff.name)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(staff.group)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if !staff.blurb.isEmpty {
-                    Text(staff.blurb)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-            .padding(12)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }

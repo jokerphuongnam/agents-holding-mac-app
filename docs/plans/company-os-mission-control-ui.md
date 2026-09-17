@@ -41,32 +41,23 @@ Ngoài ra có **screen thống kê token riêng** (theo staff / model / worktree
 
 ### 1. Holding home (entry canvas)
 
-Mở Holding = **một sơ đồ**, trên đó **cùng lúc** có:
-
-- **Nhân sự (staff)** của holding  
-- **Các công ty (companies)** hiện có (children / pointers)
-
-Hai loại **node khác visual**, cùng một canvas.
+Mở Holding = **sơ đồ / inventory companies only** (không liệt kê staff holding trên home).
 
 | Click | Result |
 | --- | --- |
-| **Staff** | Mở **staff detail** (drawer/panel) |
-| **Company** | **Mở company đó** (canvas + context company) |
+| **Company** | **Mở company đó** (child companies + teams + staffs) |
 
-Cạnh trên holding:
-
-- Staff → staff: reporting / manages  
-- Holding / CEO portfolio → company: **cạnh kiểu khác** (child companies)
-
-Holding cũng hiện context nhẹ: path holding, list company pointers (`children/`, `COMPANY_POINTER`, `META`).
+Holding context: path holding + registry companies (`company_registry.py`).
 
 ### 2. Company view (sau khi bấm vào một company)
 
-Cùng pattern sơ đồ:
+Trong company hiện:
 
-- Nodes: **staffs của company** (+ child companies nếu company đó còn children)  
-- Click **staff** → staff detail  
-- Click **child company** → mở tiếp company đó  
+- **Child companies** (click → mở company con / external SoT)  
+- **Teams** (`system/staffs/<team>/`)  
+- **Staffs nested under team** (không flat list toàn company)  
+- Click **staff** → staff detail (có field team)  
+- Click **child company** → drill vào company đó  
 
 **Company context strip** (header):
 

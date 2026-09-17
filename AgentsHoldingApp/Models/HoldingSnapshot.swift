@@ -3,15 +3,8 @@ import Foundation
 struct HoldingSnapshot: Equatable {
     var path: URL
     var name: String
-    var staffs: [StaffNode]
+    /// Holding inventory = companies only (no holding staff roster on home canvas).
     var companies: [CompanyNode]
-}
-
-struct StaffNode: Identifiable, Hashable {
-    var id: String { name }
-    var name: String
-    var blurb: String
-    var group: String
 }
 
 struct CompanyNode: Identifiable, Hashable {
@@ -51,5 +44,33 @@ struct CompanyNode: Identifiable, Hashable {
         self.budget = budget
         self.topology = topology
         self.pointerPath = pointerPath
+    }
+}
+
+/// Opened company: child companies + teams with nested staffs.
+struct CompanySnapshot: Equatable {
+    var node: CompanyNode
+    var children: [CompanyNode]
+    var teams: [TeamNode]
+}
+
+struct TeamNode: Identifiable, Hashable {
+    var id: String { name }
+    var name: String
+    var staffs: [StaffNode]
+}
+
+struct StaffNode: Identifiable, Hashable {
+    /// Unique within a company: `team/name`.
+    var id: String
+    var name: String
+    var team: String
+    var blurb: String
+
+    init(name: String, team: String, blurb: String) {
+        self.id = "\(team)/\(name)"
+        self.name = name
+        self.team = team
+        self.blurb = blurb
     }
 }

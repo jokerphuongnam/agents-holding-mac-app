@@ -5,12 +5,12 @@ struct StaffDetailView: View {
     let staffId: String
 
     var body: some View {
-        let staff = appModel.holding?.staffs.first { $0.id == staffId }
+        let staff = appModel.staff(for: staffId)
         Group {
             if let staff {
                 Form {
                     LabeledContent("Name", value: staff.name)
-                    LabeledContent("Group", value: staff.group)
+                    LabeledContent("Team", value: staff.team)
                     if !staff.blurb.isEmpty {
                         LabeledContent("Blurb") {
                             Text(staff.blurb)
@@ -29,7 +29,13 @@ struct StaffDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Holding") { appModel.backToHolding() }
+                Button("Company") {
+                    if let company = appModel.openCompany?.node {
+                        appModel.selection = .company(company.id)
+                    } else {
+                        appModel.backToHolding()
+                    }
+                }
             }
         }
     }
