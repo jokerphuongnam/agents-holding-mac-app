@@ -75,8 +75,20 @@ struct StaffDetailView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 200, alignment: .leading)
                 if let lead = detail.lead, !lead.isEmpty {
-                    Text(lead)
-                        .fontWeight(.semibold)
+                    Button {
+                        appModel.openStaffNamed(lead)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.fill")
+                            Text(lead)
+                                .fontWeight(.semibold)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Mở detail cấp trên")
                 } else {
                     Text("— (top dispatcher)")
                         .foregroundStyle(.tertiary)

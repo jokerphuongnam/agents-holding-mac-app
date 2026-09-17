@@ -83,6 +83,31 @@ final class AppModel: ObservableObject {
         selection = .staff(staff.id)
     }
 
+    /// Open staff by role name within the current company OS (or holding).
+    func openStaffNamed(_ name: String) {
+        let inHolding = openCompany == nil
+        let teams = inHolding ? (holding?.teams ?? []) : (openCompany?.teams ?? [])
+        if let node = teams.flatMap(\.staffs).first(where: { $0.name == name }) {
+            openStaff(node, inHolding: inHolding)
+            return
+        }
+        // Fallback: search team folders via detail loader (team unknown).
+        let root = inHolding ? holdingPackageRoot : openCompany?.companyRoot
+        guard let root else {
+            lastError = "No company/holding root to open staff \(name)"
+            return
+        }
+        for team in teams.map(\.name) + ["leadership"] {
+            if let detail = staffDirectory.loadStaffDetail(name: name, team: team, companyRoot: root) {
+                staffDetail = detail
+                openSkill = nil
+                selection = .staff(detail.node.id)
+                return
+            }
+        }
+        lastError = "Staff not found: \(name)"
+    }
+
     func openSkill(_ skill: SkillRef) {
         openSkill = skill
         selection = .skill(skill.skillID)
