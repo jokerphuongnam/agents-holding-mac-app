@@ -31,6 +31,8 @@ struct CompanyInstallRequest: Equatable {
     var budget: String
     /// If true, only `company_registry.py register` (folder already has Company OS).
     var registerOnly: Bool
+    /// Optional roster review JSON applied after create (or onto existing company).
+    var rosterSpecJSON: Data?
 }
 
 /// Folder picker + create-company.sh / registry register.
@@ -86,14 +88,17 @@ struct CompanyInstallService {
         let holdingPackage = resolveHoldingPackage(holdingRoot)
         let installDir = holdingPackage.appendingPathComponent("system/install")
 
+        let companyPath = request.projectRoot
+            .appendingPathComponent(".agents")
+            .appendingPathComponent("\(name)-company")
+
+        var log: [String] = []
+
         if request.registerOnly {
             let script = installDir.appendingPathComponent("company_registry.py")
             guard FileManager.default.isReadableFile(atPath: script.path) else {
                 throw CompanyInstallError.missingScript(script)
             }
-            let companyPath = request.projectRoot
-                .appendingPathComponent(".agents")
-                .appendingPathComponent("\(name)-company")
             var args = [
                 "register",
                 "--slug", "\(name)-company",
@@ -103,19 +108,44 @@ struct CompanyInstallService {
             if FileManager.default.fileExists(atPath: companyPath.path) {
                 args += ["--company-path", companyPath.path]
             }
-            return try runPython(script, arguments: args)
+            log.append(try runPython(script, arguments: args))
+        } else {
+            let script = installDir.appendingPathComponent("create-company.sh")
+            guard FileManager.default.isReadableFile(atPath: script.path) else {
+                throw CompanyInstallError.missingScript(script)
+            }
+            let args = [
+                "--name", name,
+                "--budget", request.budget,
+                "--project-root", request.projectRoot.path,
+            ]
+            log.append(try runBash(script, arguments: args))
         }
 
-        let script = installDir.appendingPathComponent("create-company.sh")
-        guard FileManager.default.isReadableFile(atPath: script.path) else {
-            throw CompanyInstallError.missingScript(script)
+        if let specData = request.rosterSpecJSON {
+            let apply = installDir.appendingPathComponent("apply_company_roster.py")
+            guard FileManager.default.isReadableFile(atPath: apply.path) else {
+                throw CompanyInstallError.missingScript(apply)
+            }
+            let tmp = FileManager.default.temporaryDirectory
+                .appendingPathComponent("roster-\(UUID().uuidString).json")
+            try specData.write(to: tmp)
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            let agentsHome = holdingPackage.deletingLastPathComponent() // …/agents-holding
+            let library = agentsHome.appendingPathComponent("templates/skills-library")
+            log.append(
+                try runPython(
+                    apply,
+                    arguments: [
+                        "--company-path", companyPath.path,
+                        "--spec", tmp.path,
+                        "--library", library.path,
+                    ]
+                )
+            )
         }
-        let args = [
-            "--name", name,
-            "--budget", request.budget,
-            "--project-root", request.projectRoot.path,
-        ]
-        return try runBash(script, arguments: args)
+
+        return log.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
     private func sanitizeName(_ raw: String) -> String {
