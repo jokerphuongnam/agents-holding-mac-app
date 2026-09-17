@@ -1,0 +1,23 @@
+# Xcode
+AgentsHoldingApp.xcodeproj/
+*.xcuserdata/
+xcuserdata/
+DerivedData/
+build/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# SwiftPM (if added later)
+.Build/
+.swiftpm/
+Packages/
+
+# Secrets
+*.pem
+.env
+.env.*

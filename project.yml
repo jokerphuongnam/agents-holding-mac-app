@@ -1,0 +1,36 @@
+name: AgentsHoldingApp
+options:
+  bundleIdPrefix: dev.agentsholding
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+targets:
+  AgentsHoldingApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: AgentsHoldingApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.agentsholding.app
+        PRODUCT_NAME: AgentsHoldingApp
+        INFOPLIST_KEY_CFBundleDisplayName: Agents Holding
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        GENERATE_INFOPLIST_FILE: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: AgentsHoldingApp/Info.plist
+      properties:
+        CFBundleDisplayName: Agents Holding
+        LSMinimumSystemVersion: "14.0"
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
