@@ -138,25 +138,23 @@ struct HoldingDiscovery {
     }
 
     private func loadCompaniesFromChildrenDir(_ childrenDir: URL) -> [CompanyNode] {
-        guard FileManager.default.fileExists(atPath: childrenDir.path) else { return [] }
-        let fm = FileManager.default
-        guard let items = try? fm.contentsOfDirectory(
-            at: childrenDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: childrenDir.path) else {
+            return []
+        }
 
         var out: [CompanyNode] = []
-        for url in items {
+        for name in names where !name.hasPrefix(".") {
+            let url = childrenDir.appendingPathComponent(name)
             var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            let slug = url.lastPathComponent
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
             let pointer = url.appendingPathComponent("COMPANY_POINTER.md")
             out.append(
                 CompanyNode(
-                    slug: slug,
+                    slug: name,
                     companyPath: url,
-                    pointerPath: fm.fileExists(atPath: pointer.path) ? pointer : nil
+                    pointerPath: FileManager.default.fileExists(atPath: pointer.path) ? pointer : nil
                 )
             )
         }
