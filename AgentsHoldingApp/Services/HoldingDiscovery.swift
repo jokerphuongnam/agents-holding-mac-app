@@ -15,6 +15,10 @@ enum HoldingDiscoveryError: LocalizedError {
 }
 
 /// Resolves sibling/default holding checkout and loads a light P0 snapshot.
+///
+/// Companies SoT is **not** `holding/children/` folders.
+/// Inventory = `holding/system/install/company_registry.py` →
+/// local `holding/cache/companies.sqlite` (same as Python staff tools).
 struct HoldingDiscovery {
     /// Prefer env, then UserDefaults, then sibling `../agents-holding` next to this repo.
     func resolveHoldingPath() throws -> URL {
@@ -44,6 +48,13 @@ struct HoldingDiscovery {
             return sibling.standardizedFileURL
         }
 
+        // Installed copy
+        let homeAgents = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".agents/holding")
+        if FileManager.default.fileExists(atPath: homeAgents.appendingPathComponent("system/staffs").path) {
+            return homeAgents.deletingLastPathComponent() // ~/.agents (holding package inside)
+        }
+
         let homeFallback = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Documents/Agents/agents-holding")
         if FileManager.default.fileExists(atPath: homeFallback.path) {
@@ -55,12 +66,10 @@ struct HoldingDiscovery {
 
     func loadSnapshot(at holdingRoot: URL) throws -> HoldingSnapshot {
         let holdingCompany = holdingRoot.appendingPathComponent("holding")
-        let staffsRoot = holdingCompany.appendingPathComponent("system/staffs")
-        let childrenRoot = holdingCompany.appendingPathComponent("children")
 
-        // Accept either `holding/` package layout or root-as-company.
+        // Accept either repo layout `agents-holding/holding/…` or installed `~/.agents/holding/…`
         let root: URL
-        if FileManager.default.fileExists(atPath: staffsRoot.path) {
+        if FileManager.default.fileExists(atPath: holdingCompany.appendingPathComponent("system/staffs").path) {
             root = holdingCompany
         } else if FileManager.default.fileExists(atPath: holdingRoot.appendingPathComponent("system/staffs").path) {
             root = holdingRoot
@@ -69,7 +78,16 @@ struct HoldingDiscovery {
         }
 
         let staffs = loadStaffs(under: root.appendingPathComponent("system/staffs"))
-        let companies = loadCompanies(under: root.appendingPathComponent("children"))
+        var companies = loadCompaniesFromRegistry(holdingPackage: root)
+
+        // If registry empty, fall back to scan (discover on disk without requiring prior register).
+        if companies.isEmpty {
+            companies = loadCompaniesFromScan(holdingPackage: root)
+        }
+
+        // Merge any on-disk children/ pointers (parent→child template layout), by slug.
+        let diskChildren = loadCompaniesFromChildrenDir(root.appendingPathComponent("children"))
+        companies = mergeCompanies(companies, diskChildren)
 
         return HoldingSnapshot(
             path: holdingRoot,
@@ -78,6 +96,8 @@ struct HoldingDiscovery {
             companies: companies
         )
     }
+
+    // MARK: - Staffs
 
     private func loadStaffs(under staffsDir: URL) -> [StaffNode] {
         guard let enumerator = FileManager.default.enumerator(
@@ -98,7 +118,45 @@ struct HoldingDiscovery {
         return out.sorted { $0.name < $1.name }
     }
 
-    private func loadCompanies(under childrenDir: URL) -> [CompanyNode] {
+    // MARK: - Companies (registry SoT)
+
+    private func companyRegistryScript(holdingPackage: URL) -> URL? {
+        let candidate = holdingPackage
+            .appendingPathComponent("system/install/company_registry.py")
+        return FileManager.default.isReadableFile(atPath: candidate.path) ? candidate : nil
+    }
+
+    private func loadCompaniesFromRegistry(holdingPackage: URL) -> [CompanyNode] {
+        guard let script = companyRegistryScript(holdingPackage: holdingPackage) else { return [] }
+        guard let output = runPython(script, arguments: ["list", "--tsv"]) else { return [] }
+        return parseRegistryListTSV(output)
+    }
+
+    private func loadCompaniesFromScan(holdingPackage: URL) -> [CompanyNode] {
+        guard let script = companyRegistryScript(holdingPackage: holdingPackage) else { return [] }
+        // Default scan roots: Language tree + Agents tree (where companies usually live).
+        let roots = [
+            NSHomeDirectory() + "/Documents/Code/Language",
+            NSHomeDirectory() + "/Documents/Agents",
+        ]
+        var found: [CompanyNode] = []
+        var seen = Set<String>()
+        for root in roots where FileManager.default.fileExists(atPath: root) {
+            guard let output = runPython(
+                script,
+                arguments: ["scan", "--root", root, "--max-depth", "8"]
+            ) else { continue }
+            for company in parseScanTSV(output) {
+                let key = "\(company.slug)|\(company.projectRoot?.path ?? "")"
+                if seen.insert(key).inserted {
+                    found.append(company)
+                }
+            }
+        }
+        return found.sorted { $0.slug < $1.slug }
+    }
+
+    private func loadCompaniesFromChildrenDir(_ childrenDir: URL) -> [CompanyNode] {
         guard FileManager.default.fileExists(atPath: childrenDir.path) else { return [] }
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(
@@ -112,20 +170,120 @@ struct HoldingDiscovery {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
             let slug = url.lastPathComponent
-            if slug == "README.md" { continue }
             let pointer = url.appendingPathComponent("COMPANY_POINTER.md")
-            let meta = url.appendingPathComponent("META.toml")
             out.append(
                 CompanyNode(
                     slug: slug,
-                    displayName: slug.replacingOccurrences(of: "-company", with: ""),
-                    pointerPath: fm.fileExists(atPath: pointer.path) ? pointer : nil,
-                    projectRoot: nil
+                    companyPath: url,
+                    pointerPath: fm.fileExists(atPath: pointer.path) ? pointer : nil
                 )
             )
-            _ = meta // P0: parse later for project_root
         }
-        return out.sorted { $0.slug < $1.slug }
+        return out
+    }
+
+    private func mergeCompanies(_ primary: [CompanyNode], _ secondary: [CompanyNode]) -> [CompanyNode] {
+        var bySlug = Dictionary(uniqueKeysWithValues: primary.map { ($0.slug, $0) })
+        for extra in secondary {
+            if bySlug[extra.slug] == nil {
+                bySlug[extra.slug] = extra
+            }
+        }
+        return bySlug.values.sorted { $0.slug < $1.slug }
+    }
+
+    // MARK: - Python bridge
+
+    private func runPython(_ script: URL, arguments: [String]) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [script.path] + arguments
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "COMPANY_REGISTRY_TSV": "1",
+        ]) { _, new in new }
+
+        let out = Pipe()
+        let err = Pipe()
+        process.standardOutput = out
+        process.standardError = err
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// `list --tsv`: cols / row / count lines.
+    private func parseRegistryListTSV(_ text: String) -> [CompanyNode] {
+        var out: [CompanyNode] = []
+        for line in text.split(whereSeparator: \.isNewline).map(String.init) {
+            let cols = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard cols.first == "row", cols.count >= 9 else { continue }
+            // row id slug project_root company_path status budget topology dup hint
+            let id = cols[1]
+            let slug = cols[2]
+            let projectRoot = cols[3]
+            let companyPath = cols[4]
+            let status = cols[5]
+            let budget = cols[6]
+            let topology = cols[7]
+            out.append(
+                CompanyNode(
+                    id: id,
+                    slug: slug,
+                    projectRoot: pathURL(projectRoot),
+                    companyPath: pathURL(companyPath),
+                    status: status,
+                    budget: budget,
+                    topology: topology,
+                    pointerPath: pointerIfPresent(companyPath: pathURL(companyPath))
+                )
+            )
+        }
+        return out
+    }
+
+    /// `scan --tsv`: scan lines.
+    private func parseScanTSV(_ text: String) -> [CompanyNode] {
+        var out: [CompanyNode] = []
+        for line in text.split(whereSeparator: \.isNewline).map(String.init) {
+            let cols = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard cols.first == "scan", cols.count >= 4 else { continue }
+            // scan slug project_root company_path budget topology in_registry registry_status dup action
+            let slug = cols[1]
+            let projectRoot = cols[2]
+            let companyPath = cols[3]
+            let budget = cols.count > 4 ? cols[4] : ""
+            let topology = cols.count > 5 ? cols[5] : ""
+            let status = cols.count > 7 ? (cols[7].isEmpty ? "active" : cols[7]) : "active"
+            out.append(
+                CompanyNode(
+                    slug: slug,
+                    projectRoot: pathURL(projectRoot),
+                    companyPath: pathURL(companyPath),
+                    status: status,
+                    budget: budget,
+                    topology: topology,
+                    pointerPath: pointerIfPresent(companyPath: pathURL(companyPath))
+                )
+            )
+        }
+        return out
+    }
+
+    private func pathURL(_ raw: String) -> URL? {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, t != "—" else { return nil }
+        return URL(fileURLWithPath: t)
+    }
+
+    private func pointerIfPresent(companyPath: URL?) -> URL? {
+        guard let companyPath else { return nil }
+        let pointer = companyPath.appendingPathComponent("COMPANY_POINTER.md")
+        return FileManager.default.fileExists(atPath: pointer.path) ? pointer : nil
     }
 
     private func firstBlurb(in fileURL: URL) -> String? {

@@ -18,10 +18,16 @@ struct HoldingCanvasView: View {
                         header(holding)
 
                         nodeSection(title: "Companies", systemImage: "building.2") {
-                            LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(holding.companies) { company in
-                                    CompanyCard(company: company) {
-                                        appModel.openCompany(company)
+                            if holding.companies.isEmpty {
+                                Text("No companies in registry. Run: python3 holding/system/install/company_registry.py scan --register")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 12) {
+                                    ForEach(holding.companies) { company in
+                                        CompanyCard(company: company) {
+                                            appModel.openCompany(company)
+                                        }
                                     }
                                 }
                             }
@@ -92,6 +98,12 @@ struct CompanyCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let root = company.projectRoot {
+                    Text(root.lastPathComponent)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
             .padding(12)

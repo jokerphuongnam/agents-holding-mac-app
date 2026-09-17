@@ -15,9 +15,36 @@ struct StaffNode: Identifiable, Hashable {
 }
 
 struct CompanyNode: Identifiable, Hashable {
-    var id: String { slug }
+    /// Stable id from registry when present; else slug.
+    var id: String
     var slug: String
     var displayName: String
-    var pointerPath: URL?
     var projectRoot: URL?
+    var companyPath: URL?
+    var status: String
+    var budget: String
+    var topology: String
+    var pointerPath: URL?
+
+    init(
+        id: String? = nil,
+        slug: String,
+        displayName: String? = nil,
+        projectRoot: URL? = nil,
+        companyPath: URL? = nil,
+        status: String = "active",
+        budget: String = "",
+        topology: String = "",
+        pointerPath: URL? = nil
+    ) {
+        self.id = id ?? slug
+        self.slug = slug
+        self.displayName = displayName ?? slug.replacingOccurrences(of: "-company", with: "")
+        self.projectRoot = projectRoot
+        self.companyPath = companyPath
+        self.status = status
+        self.budget = budget
+        self.topology = topology
+        self.pointerPath = pointerPath
+    }
 }

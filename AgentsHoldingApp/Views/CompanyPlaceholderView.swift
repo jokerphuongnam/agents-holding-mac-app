@@ -13,6 +13,20 @@ struct CompanyPlaceholderView: View {
                         .font(.largeTitle.weight(.semibold))
                     Text(company.slug)
                         .foregroundStyle(.secondary)
+                    LabeledContent("Status", value: company.status)
+                    if !company.budget.isEmpty {
+                        LabeledContent("Budget", value: company.budget)
+                    }
+                    if let projectRoot = company.projectRoot {
+                        Text("Project: \(projectRoot.path)")
+                            .font(.caption)
+                            .textSelection(.enabled)
+                    }
+                    if let companyPath = company.companyPath {
+                        Text("Company: \(companyPath.path)")
+                            .font(.caption)
+                            .textSelection(.enabled)
+                    }
                     if let pointer = company.pointerPath {
                         Text("Pointer: \(pointer.path)")
                             .font(.caption)
