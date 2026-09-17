@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Holding home: **companies only** (staffs/teams live inside each company).
+/// Holding home: companies + holding personnel (teams/staffs).
 struct HoldingCanvasView: View {
     @EnvironmentObject private var appModel: AppModel
 
@@ -14,25 +14,10 @@ struct HoldingCanvasView: View {
                 )
             } else if let holding = appModel.holding {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 28) {
                         header(holding)
-
-                        Label("Companies", systemImage: "building.2")
-                            .font(.headline)
-
-                        if holding.companies.isEmpty {
-                            Text("No companies in registry. Run: python3 holding/system/install/company_registry.py scan --register")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(holding.companies) { company in
-                                    CompanyCard(company: company) {
-                                        appModel.openCompanyNode(company)
-                                    }
-                                }
-                            }
-                        }
+                        companiesSection(holding)
+                        teamsSection(holding)
                     }
                     .padding(24)
                 }
@@ -54,9 +39,49 @@ struct HoldingCanvasView: View {
             Text(holding.path.path)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("\(holding.companies.count) companies")
+            Text("\(holding.companies.count) companies · \(holding.teams.count) teams · \(holding.teams.reduce(0) { $0 + $1.staffs.count }) staff")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func companiesSection(_ holding: HoldingSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Companies", systemImage: "building.2")
+                .font(.headline)
+            if holding.companies.isEmpty {
+                Text("No companies in registry. Run company_registry.py scan --register")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(holding.companies) { company in
+                        CompanyCard(company: company) {
+                            appModel.openCompanyNode(company)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func teamsSection(_ holding: HoldingSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Holding staffs", systemImage: "person.3")
+                .font(.headline)
+            if holding.teams.isEmpty {
+                Text("No holding staffs under system/staffs")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(holding.teams) { team in
+                    TeamBlock(team: team) { staff in
+                        appModel.openStaff(staff, inHolding: true)
+                    }
+                }
+            }
         }
     }
 }

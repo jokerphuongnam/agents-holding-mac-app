@@ -1,0 +1,37 @@
+import SwiftUI
+
+struct SkillDetailView: View {
+    @EnvironmentObject private var appModel: AppModel
+
+    var body: some View {
+        Group {
+            if let skill = appModel.openSkill, let path = skill.path,
+               let text = try? String(contentsOf: path, encoding: .utf8) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(skill.skillID)
+                            .font(.title2.weight(.semibold))
+                        Text(path.path)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                        Divider()
+                        Text(text)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(24)
+                }
+                .navigationTitle(skill.skillID)
+            } else {
+                ContentUnavailableView("Skill not found", systemImage: "book.closed")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Back") { appModel.backFromSkill() }
+            }
+        }
+    }
+}

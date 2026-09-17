@@ -105,7 +105,7 @@ struct CompanyCanvasView: View {
             } else {
                 ForEach(snap.teams) { team in
                     TeamBlock(team: team) { staff in
-                        appModel.openStaff(staff)
+                        appModel.openStaff(staff, inHolding: false)
                     }
                 }
             }

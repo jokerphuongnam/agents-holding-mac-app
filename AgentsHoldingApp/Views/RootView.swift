@@ -18,8 +18,10 @@ struct RootView: View {
             HoldingCanvasView()
         case .company:
             CompanyCanvasView()
-        case .staff(let id):
-            StaffDetailView(staffId: id)
+        case .staff:
+            StaffDetailView()
+        case .skill:
+            SkillDetailView()
         case .usage:
             UsagePlaceholderView()
         }
@@ -44,6 +46,17 @@ struct SidebarView: View {
                         }
                     }
                 }
+                Section("Holding staffs") {
+                    ForEach(holding.teams) { team in
+                        DisclosureGroup(team.name) {
+                            ForEach(team.staffs) { staff in
+                                Button(staff.name) {
+                                    appModel.openStaff(staff, inHolding: true)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if let snap = appModel.openCompany {
@@ -62,7 +75,7 @@ struct SidebarView: View {
                         DisclosureGroup(team.name) {
                             ForEach(team.staffs) { staff in
                                 Button(staff.name) {
-                                    appModel.openStaff(staff)
+                                    appModel.openStaff(staff, inHolding: false)
                                 }
                             }
                         }

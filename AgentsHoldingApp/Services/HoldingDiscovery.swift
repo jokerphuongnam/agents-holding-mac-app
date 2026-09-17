@@ -77,7 +77,6 @@ struct HoldingDiscovery {
             throw HoldingDiscoveryError.notAHolding(holdingRoot)
         }
 
-        // Holding home = companies only (staffs live inside each company, under teams).
         var companies = loadCompaniesFromRegistry(holdingPackage: root)
 
         // If registry empty, fall back to scan (discover on disk without requiring prior register).
@@ -89,10 +88,14 @@ struct HoldingDiscovery {
         let diskChildren = loadCompaniesFromChildrenDir(root.appendingPathComponent("children"))
         companies = mergeCompanies(companies, diskChildren)
 
+        // Holding also has its own personnel (holding-ceo, holding-hr, …).
+        let teams = StaffDirectory().loadTeams(companyRoot: root)
+
         return HoldingSnapshot(
             path: holdingRoot,
             name: holdingRoot.lastPathComponent,
-            companies: companies
+            companies: companies,
+            teams: teams
         )
     }
 

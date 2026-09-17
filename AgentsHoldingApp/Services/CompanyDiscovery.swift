@@ -3,21 +3,22 @@ import Foundation
 /// Loads one Company OS tree: child companies, teams, staffs-by-team.
 struct CompanyDiscovery {
     private let holdingDiscovery = HoldingDiscovery()
+    private let staffDirectory = StaffDirectory()
 
     func loadCompany(from node: CompanyNode, holdingRoot: URL?) throws -> CompanySnapshot {
         guard let companyPath = resolveCompanyPath(node) else {
-            return CompanySnapshot(node: node, children: [], teams: [])
+            return CompanySnapshot(node: node, children: [], teams: [], companyRoot: node.companyPath ?? node.projectRoot ?? URL(fileURLWithPath: "/"))
         }
 
         let children = loadChildren(parentCompanyPath: companyPath, holdingRoot: holdingRoot)
-        let teams = loadTeams(staffsRoot: companyPath.appendingPathComponent("system/staffs"))
+        let teams = staffDirectory.loadTeams(companyRoot: companyPath)
 
         var enriched = node
         if enriched.companyPath == nil {
             enriched.companyPath = companyPath
         }
 
-        return CompanySnapshot(node: enriched, children: children, teams: teams)
+        return CompanySnapshot(node: enriched, children: children, teams: teams, companyRoot: companyPath)
     }
 
     private func resolveCompanyPath(_ node: CompanyNode) -> URL? {
@@ -139,43 +140,6 @@ struct CompanyDiscovery {
         return out
     }
 
-    // MARK: - Teams + staffs
-
-    private func loadTeams(staffsRoot: URL) -> [TeamNode] {
-        // URL-based contentsOfDirectory(at:options:) returns [] on these trees;
-        // contentsOfDirectory(atPath:) sees the real entries (verified for marlin-language-company).
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: staffsRoot.path) else {
-            return []
-        }
-
-        var teams: [TeamNode] = []
-        for name in names where !name.hasPrefix(".") {
-            let url = staffsRoot.appendingPathComponent(name)
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
-                continue
-            }
-            let staffs = loadStaffs(inTeamDir: url, team: name)
-            teams.append(TeamNode(name: name, staffs: staffs))
-        }
-        return teams.sorted { $0.name < $1.name }
-    }
-
-    private func loadStaffs(inTeamDir teamDir: URL, team: String) -> [StaffNode] {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: teamDir.path) else {
-            return []
-        }
-
-        return names
-            .filter { $0.hasSuffix(".md") && !$0.hasPrefix(".") }
-            .map { fileName -> StaffNode in
-                let file = teamDir.appendingPathComponent(fileName)
-                let name = (fileName as NSString).deletingPathExtension
-                return StaffNode(name: name, team: team, blurb: firstBlurb(in: file) ?? "")
-            }
-            .sorted { $0.name < $1.name }
-    }
-
     // MARK: - META / helpers
 
     private func parseCompanyPath(fromMETA meta: URL, key: String = "company_path") -> URL? {
@@ -205,18 +169,6 @@ struct CompanyDiscovery {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, t != "—" else { return nil }
         return URL(fileURLWithPath: (t as NSString).expandingTildeInPath)
-    }
-
-    private func firstBlurb(in fileURL: URL) -> String? {
-        guard let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return nil }
-        for line in text.components(separatedBy: .newlines) {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty || t.hasPrefix("---") || t.hasPrefix("#") || t.hasPrefix("name:") { continue }
-            if t.hasPrefix("**") || t.count > 24 {
-                return String(t.prefix(140))
-            }
-        }
-        return nil
     }
 
     private func runPython(_ script: URL, arguments: [String]) -> String? {

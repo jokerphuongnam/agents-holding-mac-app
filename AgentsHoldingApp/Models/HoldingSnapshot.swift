@@ -3,8 +3,10 @@ import Foundation
 struct HoldingSnapshot: Equatable {
     var path: URL
     var name: String
-    /// Holding inventory = companies only (no holding staff roster on home canvas).
+    /// Holding inventory companies (registry).
     var companies: [CompanyNode]
+    /// Holding personnel (system/staffs), grouped by team.
+    var teams: [TeamNode]
 }
 
 struct CompanyNode: Identifiable, Hashable {
@@ -52,25 +54,5 @@ struct CompanySnapshot: Equatable {
     var node: CompanyNode
     var children: [CompanyNode]
     var teams: [TeamNode]
-}
-
-struct TeamNode: Identifiable, Hashable {
-    var id: String { name }
-    var name: String
-    var staffs: [StaffNode]
-}
-
-struct StaffNode: Identifiable, Hashable {
-    /// Unique within a company: `team/name`.
-    var id: String
-    var name: String
-    var team: String
-    var blurb: String
-
-    init(name: String, team: String, blurb: String) {
-        self.id = "\(team)/\(name)"
-        self.name = name
-        self.team = team
-        self.blurb = blurb
-    }
+    var companyRoot: URL
 }
