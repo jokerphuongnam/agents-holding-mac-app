@@ -212,7 +212,7 @@ Reduced-motion → tắt scale, fallback fade/instant.
 
 | Phase | Deliverable |
 | --- | --- |
-| **P0** | Repo UI + discover Holding; **org canvas** holding (staff + company nodes); click → staff detail / open company; company canvas read-only + context strip. **Add company wizard**: folder picker → review/select template staffs → custom staff (+ skills library / new skill) → `create-company.sh` + `apply_company_roster.py`. Scale-up motion = **nice-to-have polish** (không chặn P0) |
+| **P0** | Repo UI + discover Holding; **org canvas** holding (staff + company nodes); click → staff detail / open company; company canvas read-only + context strip. **Add company wizard** (catalog-only): folder → select **template staffs** → select **library skills** → `create-company.sh` + `apply_company_roster.py`. **Không** invent staff/skill trống trong app (thêm SoT vào holding templates trước). Scale-up = polish. |
 | **P1** | **Chat trong company** với CEO (worktree-bound); harness picker; wire launch/session dưới hood |
 | **P1.5** | **CEO → BA channel switch**: auto mở BA panel cùng worktree; handback đóng BA → CEO |
 | **P2** | Runtime profile table + merge resolve/hop preview; optional edit `[[roles]]` / enable + regen adapters |

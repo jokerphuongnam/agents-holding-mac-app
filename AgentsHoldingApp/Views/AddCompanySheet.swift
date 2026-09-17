@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Add company: pick folder → choose staffs from templates → choose skills from library.
+/// No blank “invent staff/skill” forms — catalog only (less guesswork, more consistent SoT).
 struct AddCompanySheet: View {
     @EnvironmentObject private var appModel: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -7,7 +9,7 @@ struct AddCompanySheet: View {
     enum Step: Int, CaseIterable {
         case folder = 0
         case staffs = 1
-        case custom = 2
+        case skills = 2
         case confirm = 3
     }
 
@@ -21,8 +23,8 @@ struct AddCompanySheet: View {
     @State private var templateStaffs: [TemplateStaff] = []
     @State private var librarySkills: [LibrarySkill] = []
     @State private var selectedStaffs: Set<String> = []
-    @State private var customStaffs: [CustomStaffDraft] = []
-    @State private var editingCustomID: String?
+    @State private var selectedSkillIDs: Set<String> = []
+    @State private var skillFilter: String = ""
 
     @State private var isWorking = false
     @State private var log: String = ""
@@ -60,27 +62,23 @@ struct AddCompanySheet: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            stepPills
-        }
-        .padding(16)
-    }
-
-    private var stepPills: some View {
-        HStack(spacing: 6) {
-            ForEach(Step.allCases, id: \.rawValue) { s in
-                Circle()
-                    .fill(s.rawValue <= step.rawValue ? Color.accentColor : Color.secondary.opacity(0.25))
-                    .frame(width: 8, height: 8)
+            HStack(spacing: 6) {
+                ForEach(Step.allCases, id: \.rawValue) { s in
+                    Circle()
+                        .fill(s.rawValue <= step.rawValue ? Color.accentColor : Color.secondary.opacity(0.25))
+                        .frame(width: 8, height: 8)
+                }
             }
         }
+        .padding(16)
     }
 
     private var stepTitle: String {
         switch step {
         case .folder: return "1 · Folder & slug"
-        case .staffs: return "2 · Review template staffs"
-        case .custom: return "3 · Custom staffs & skills"
-        case .confirm: return "4 · Confirm install"
+        case .staffs: return "2 · Chọn staffs từ template"
+        case .skills: return "3 · Chọn skills từ library"
+        case .confirm: return "4 · Confirm"
         }
     }
 
@@ -89,14 +87,14 @@ struct AddCompanySheet: View {
         switch step {
         case .folder: folderStep
         case .staffs: staffsStep
-        case .custom: customStep
+        case .skills: skillsStep
         case .confirm: confirmStep
         }
     }
 
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Chọn folder project để cài Company OS.")
+            Text("Chọn folder project. Roster chỉ lấy từ template/library — không tự chế staff/skill trống.")
                 .foregroundStyle(.secondary)
             HStack(alignment: .top) {
                 Text(projectRootPath.isEmpty ? "Chưa chọn folder" : projectRootPath)
@@ -120,17 +118,17 @@ struct AddCompanySheet: View {
 
     private var staffsStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Staffs trong template — tick để giữ sau khi cài. `ceo` luôn bắt buộc.")
+            Text("Chỉ staffs có sẵn trong `templates/company/system/staffs`. `ceo` bắt buộc. Không invent role mới ở bước này.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
-                Button("Select recommended") {
+                Button("Recommended") {
                     selectedStaffs = Set(templateStaffs.filter(\.recommended).map(\.name) + ["ceo"])
                 }
-                Button("Select all") {
+                Button("All templates") {
                     selectedStaffs = Set(templateStaffs.map(\.name))
                 }
-                Button("Clear (keep ceo)") {
+                Button("Only ceo") {
                     selectedStaffs = ["ceo"]
                 }
             }
@@ -138,7 +136,7 @@ struct AddCompanySheet: View {
 
             let grouped = Dictionary(grouping: templateStaffs, by: \.team)
             ForEach(grouped.keys.sorted(), id: \.self) { team in
-                DisclosureGroup(team) {
+                DisclosureGroup("\(team) · \((grouped[team] ?? []).count)") {
                     ForEach(grouped[team] ?? []) { staff in
                         Toggle(isOn: binding(forStaff: staff.name)) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -165,85 +163,45 @@ struct AddCompanySheet: View {
         }
     }
 
-    private var customStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Tạo staff mới (không có trong template): mô tả + chọn skills library hoặc tạo skill mới.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button {
-                let draft = CustomStaffDraft()
-                customStaffs.append(draft)
-                editingCustomID = draft.id
-            } label: {
-                Label("Add custom staff", systemImage: "plus")
-            }
-
-            ForEach($customStaffs) { $draft in
-                DisclosureGroup(isExpanded: Binding(
-                    get: { editingCustomID == draft.id },
-                    set: { editingCustomID = $0 ? draft.id : nil }
-                )) {
-                    customStaffEditor($draft)
-                } label: {
-                    Text(draft.name.isEmpty ? "Untitled staff" : draft.name)
-                }
-            }
+    private var filteredSkills: [LibrarySkill] {
+        let q = skillFilter.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if q.isEmpty { return librarySkills }
+        return librarySkills.filter {
+            $0.id.lowercased().contains(q)
+                || $0.target.lowercased().contains(q)
+                || $0.tags.contains { $0.lowercased().contains(q) }
         }
     }
 
-    private func customStaffEditor(_ draft: Binding<CustomStaffDraft>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("name", text: draft.name)
-            TextField("team", text: draft.team)
-            TextField("lead", text: draft.lead)
-            Picker("tier", selection: draft.tier) {
-                ForEach(["low", "medium", "high", "dispatch", "xhigh"], id: \.self) { Text($0) }
+    private var skillsStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Skills chỉ lấy từ `templates/skills-library` (MANIFEST). Không tạo skill trống — muốn skill mới thì thêm vào library/holding trước.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Filter skills…", text: $skillFilter)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Button("Clear skills") { selectedSkillIDs = [] }
+                Text("\(selectedSkillIDs.count) selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            TextEditor(text: draft.description)
-                .font(.body)
-                .frame(minHeight: 80)
-                .border(Color.secondary.opacity(0.2))
+            .buttonStyle(.borderless)
 
-            Text("Skills từ library").font(.caption).foregroundStyle(.secondary)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(librarySkills) { skill in
-                        Toggle(isOn: skillBinding(draft: draft, skillID: skill.id)) {
-                            VStack(alignment: .leading) {
-                                Text(skill.id).fontWeight(.medium)
-                                Text("\(skill.target) · \(skill.tags.prefix(4).joined(separator: ", "))")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+            ForEach(filteredSkills) { skill in
+                Toggle(isOn: binding(forSkill: skill.id)) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(skill.id).fontWeight(.semibold)
+                        Text("\(skill.path)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text("target: \(skill.target.isEmpty ? "—" : skill.target) · tags: \(skill.tags.prefix(6).joined(separator: ", "))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(maxHeight: 160)
-
-            Text("Skills mới").font(.caption).foregroundStyle(.secondary)
-            ForEach(draft.newSkills) { $ns in
-                VStack(alignment: .leading, spacing: 4) {
-                    TextField("skill id", text: $ns.skillID)
-                    TextField("title", text: $ns.title)
-                    TextEditor(text: $ns.body)
-                        .frame(minHeight: 60)
-                        .border(Color.secondary.opacity(0.2))
-                }
-                .padding(8)
-                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
-            }
-            Button("Add new skill stub") {
-                draft.wrappedValue.newSkills.append(NewSkillDraft())
-            }
-            .buttonStyle(.borderless)
-
-            Button("Remove this staff", role: .destructive) {
-                customStaffs.removeAll { $0.id == draft.wrappedValue.id }
-            }
-            .buttonStyle(.borderless)
         }
-        .padding(.vertical, 6)
     }
 
     private var confirmStep: some View {
@@ -251,14 +209,12 @@ struct AddCompanySheet: View {
             labeled("Folder", projectRootPath)
             labeled("Slug", name)
             labeled("Budget", budget)
-            labeled("Mode", registerOnly ? "Register only + apply roster" : "create-company + apply roster")
-            labeled("Template staffs", selectedStaffs.sorted().joined(separator: ", "))
-            if !customStaffs.isEmpty {
-                labeled(
-                    "Custom staffs",
-                    customStaffs.map { "\($0.name) (\($0.selectedSkillIDs.count) skills, \($0.newSkills.count) new)" }.joined(separator: "; ")
-                )
-            }
+            labeled("Mode", registerOnly ? "Register + apply roster" : "create-company + apply roster")
+            labeled("Staffs (template)", selectedStaffs.sorted().joined(separator: ", "))
+            labeled(
+                "Skills (library)",
+                selectedSkillIDs.isEmpty ? "— (none extra)" : selectedSkillIDs.sorted().joined(separator: ", ")
+            )
             if let localError {
                 Text(localError).foregroundStyle(.red).font(.caption)
             }
@@ -304,12 +260,7 @@ struct AddCompanySheet: View {
             return !projectRootPath.isEmpty && !name.trimmingCharacters(in: .whitespaces).isEmpty
         case .staffs:
             return selectedStaffs.contains("ceo")
-        case .custom:
-            return customStaffs.allSatisfy { draft in
-                let n = draft.name.trimmingCharacters(in: .whitespaces)
-                return n.isEmpty == false && !n.contains(" ")
-            } || customStaffs.isEmpty
-        case .confirm:
+        case .skills, .confirm:
             return true
         }
     }
@@ -331,12 +282,11 @@ struct AddCompanySheet: View {
         )
     }
 
-    private func skillBinding(draft: Binding<CustomStaffDraft>, skillID: String) -> Binding<Bool> {
+    private func binding(forSkill id: String) -> Binding<Bool> {
         Binding(
-            get: { draft.wrappedValue.selectedSkillIDs.contains(skillID) },
+            get: { selectedSkillIDs.contains(id) },
             set: { on in
-                if on { draft.wrappedValue.selectedSkillIDs.insert(skillID) }
-                else { draft.wrappedValue.selectedSkillIDs.remove(skillID) }
+                if on { selectedSkillIDs.insert(id) } else { selectedSkillIDs.remove(id) }
             }
         )
     }
@@ -361,7 +311,7 @@ struct AddCompanySheet: View {
             existingHint = "Phát hiện: \(existing.map(\.lastPathComponent).joined(separator: ", "))"
         } else {
             registerOnly = false
-            existingHint = "Chưa có Company OS → create-company rồi apply roster đã chọn."
+            existingHint = "Chưa có Company OS → create-company rồi apply roster/skills đã chọn từ catalog."
         }
         localError = nil
     }
@@ -389,26 +339,8 @@ struct AddCompanySheet: View {
 
         let spec = RosterSpec(
             keep_staffs: selectedStaffs.sorted(),
-            custom_staffs: customStaffs.map { draft in
-                RosterSpec.CustomStaffSpec(
-                    name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                    team: draft.team,
-                    description: draft.description,
-                    tier: draft.tier,
-                    lead: draft.lead,
-                    skill_ids: draft.selectedSkillIDs.sorted(),
-                    new_skills: draft.newSkills.compactMap { ns in
-                        let sid = ns.skillID.trimmingCharacters(in: .whitespaces)
-                        guard !sid.isEmpty else { return nil }
-                        return RosterSpec.NewSkillSpec(
-                            id: sid,
-                            title: ns.title.isEmpty ? sid : ns.title,
-                            body: ns.body
-                        )
-                    }
-                )
-            },
-            extra_skill_ids: []
+            custom_staffs: [],
+            extra_skill_ids: selectedSkillIDs.sorted()
         )
 
         do {
