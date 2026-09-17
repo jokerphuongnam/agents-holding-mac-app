@@ -1,3 +1,4 @@
+import MarkdownUI
 import SwiftUI
 
 struct SkillDetailView: View {
@@ -9,15 +10,15 @@ struct SkillDetailView: View {
                let text = try? String(contentsOf: path, encoding: .utf8) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(skill.skillID)
+                        Text(skill.fileLabel)
                             .font(.title2.weight(.semibold))
                         Text(path.path)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                         Divider()
-                        Text(text)
-                            .font(.system(.body, design: .monospaced))
+                        Markdown(text)
+                            .markdownTheme(.gitHub)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }

@@ -13,6 +13,7 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 - macOS 14+
 - Xcode 15+ (tested with Xcode 27 / Swift 6 toolchain)
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+- Network once to resolve SPM: [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (`MarkdownUI`)
 
 ## Setup
 
@@ -20,6 +21,7 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 cd ~/Documents/Agents/agents-holding-app
 xcodegen generate
 open AgentsHoldingApp.xcodeproj
+# Xcode → File → Packages → Resolve Package Versions (if needed)
 ```
 
 Holding path resolution (first match wins):

@@ -37,7 +37,17 @@ struct SkillRef: Identifiable, Hashable {
     var id: String { skillID }
     var skillID: String
     var title: String
+    /// Absolute path to SKILL.md when found.
     var path: URL?
+    /// Display as a file row, e.g. `…/mpm-cli/SKILL.md`.
+    var fileLabel: String {
+        if let path {
+            return path.lastPathComponent == "SKILL.md"
+                ? "\(path.deletingLastPathComponent().lastPathComponent)/SKILL.md"
+                : path.lastPathComponent
+        }
+        return "\(skillID)/SKILL.md (missing)"
+    }
 }
 
 struct StaffDetail: Hashable {

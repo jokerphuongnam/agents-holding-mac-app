@@ -156,9 +156,9 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func skillsSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Skills (biên nhiệm vụ)", systemImage: "book")
+            Label("Skills (files)", systemImage: "doc.text")
                 .font(.headline)
-            Text("Mỗi skill = phạm vi việc được làm (vd. devops → CLI; git → git). Bấm để đọc SKILL.md.")
+            Text("List SKILL.md — bấm file để mở dạng Markdown. Mỗi skill = biên nhiệm vụ (vd. devops → CLI).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -167,36 +167,52 @@ struct StaffDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(detail.skills) { skill in
-                    Button {
-                        appModel.openSkill(skill)
-                    } label: {
-                        HStack {
-                            Image(systemName: skill.path == nil ? "questionmark.circle" : "doc.text")
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(skill.skillID)
-                                    .fontWeight(.semibold)
-                                if skill.title != skill.skillID {
-                                    Text(skill.title)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                VStack(spacing: 0) {
+                    ForEach(detail.skills) { skill in
+                        Button {
+                            appModel.openSkill(skill)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: skill.path == nil ? "questionmark.folder" : "doc.richtext")
+                                    .foregroundStyle(skill.path == nil ? .orange : .accentColor)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(skill.fileLabel)
+                                        .font(.system(.body, design: .monospaced))
+                                        .fontWeight(.medium)
+                                    if skill.title != skill.skillID {
+                                        Text(skill.title)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    if let path = skill.path {
+                                        Text(path.path)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    } else {
+                                        Text("SKILL.md not found under system/skills")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
                                 }
-                                if skill.path == nil {
-                                    Text("SKILL.md not found")
-                                        .font(.caption2)
-                                        .foregroundStyle(.orange)
+                                Spacer()
+                                if skill.path != nil {
+                                    Image(systemName: "chevron.right")
+                                        .foregroundStyle(.tertiary)
                                 }
                             }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.tertiary)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 8)
                         }
-                        .padding(10)
-                        .background(.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
+                        .buttonStyle(.plain)
+                        .disabled(skill.path == nil)
+                        if skill.id != detail.skills.last?.id {
+                            Divider()
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(skill.path == nil)
                 }
+                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
