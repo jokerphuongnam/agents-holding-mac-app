@@ -212,7 +212,7 @@ Reduced-motion → tắt scale, fallback fade/instant.
 
 | Phase | Deliverable |
 | --- | --- |
-| **P0** | Repo UI + discover Holding; **org canvas** holding (staff + company nodes); click → staff detail / open company; company canvas read-only + context strip. Scale-up motion = **nice-to-have polish** (không chặn P0) |
+| **P0** | Repo UI + discover Holding; **org canvas** holding (staff + company nodes); click → staff detail / open company; company canvas read-only + context strip. **Add company**: folder picker → `create-company.sh` hoặc registry register. Scale-up motion = **nice-to-have polish** (không chặn P0) |
 | **P1** | **Chat trong company** với CEO (worktree-bound); harness picker; wire launch/session dưới hood |
 | **P1.5** | **CEO → BA channel switch**: auto mở BA panel cùng worktree; handback đóng BA → CEO |
 | **P2** | Runtime profile table + merge resolve/hop preview; optional edit `[[roles]]` / enable + regen adapters |
