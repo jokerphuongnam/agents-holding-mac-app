@@ -118,7 +118,7 @@ struct StaffDetailView: View {
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "person.fill")
-                                        .foregroundStyle(.accentColor)
+                                        .foregroundStyle(Color.accentColor)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(report.name)
                                             .fontWeight(.semibold)
