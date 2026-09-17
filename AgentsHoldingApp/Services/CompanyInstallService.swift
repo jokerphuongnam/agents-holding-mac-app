@@ -49,6 +49,31 @@ struct CompanyInstallService {
         return panel.url
     }
 
+    /// Browse files and/or folders under a project for a staff path fence.
+    func pickAllowPaths(projectRoot: URL) -> [URL] {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.directoryURL = projectRoot
+        panel.message = "Chọn file/folder staff được phép làm việc (có thể chọn nhiều)"
+        panel.prompt = "Allow"
+        guard panel.runModal() == .OK else { return [] }
+        return panel.urls
+    }
+
+    /// Prefer project-relative paths when selection is inside projectRoot.
+    func relativePath(for url: URL, projectRoot: URL) -> String {
+        let root = projectRoot.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        if path == root { return "." }
+        if path.hasPrefix(root + "/") {
+            return String(path.dropFirst(root.count + 1))
+        }
+        return path
+    }
+
     /// Detect existing `.agents/<slug>-company` under project root.
     func existingCompanyDirs(in projectRoot: URL) -> [URL] {
         let agents = projectRoot.appendingPathComponent(".agents")

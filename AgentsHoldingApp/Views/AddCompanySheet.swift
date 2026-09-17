@@ -10,7 +10,8 @@ struct AddCompanySheet: View {
         case folder = 0
         case staffs = 1
         case skills = 2
-        case confirm = 3
+        case paths = 3
+        case confirm = 4
     }
 
     @State private var step: Step = .folder
@@ -25,6 +26,9 @@ struct AddCompanySheet: View {
     @State private var selectedStaffs: Set<String> = []
     @State private var selectedSkillIDs: Set<String> = []
     @State private var skillFilter: String = ""
+    /// staff name → allowed paths (project-relative when possible)
+    @State private var staffPathFences: [String: [String]] = [:]
+    @State private var pathsFocusStaff: String = "ceo"
 
     @State private var isWorking = false
     @State private var log: String = ""
@@ -78,7 +82,8 @@ struct AddCompanySheet: View {
         case .folder: return "1 · Folder & slug"
         case .staffs: return "2 · Chọn staffs từ template"
         case .skills: return "3 · Chọn skills từ library"
-        case .confirm: return "4 · Confirm"
+        case .paths: return "4 · Path fence (browse files/folders)"
+        case .confirm: return "5 · Confirm"
         }
     }
 
@@ -88,6 +93,7 @@ struct AddCompanySheet: View {
         case .folder: folderStep
         case .staffs: staffsStep
         case .skills: skillsStep
+        case .paths: pathsStep
         case .confirm: confirmStep
         }
     }
@@ -204,6 +210,63 @@ struct AddCompanySheet: View {
         }
     }
 
+    private var pathsStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Với mỗi staff đã chọn, Browse để allow file/folder được làm việc. Path ưu tiên relative tới project folder. Có thể để trống (chưa fence).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Staff", selection: $pathsFocusStaff) {
+                ForEach(selectedStaffs.sorted(), id: \.self) { Text($0).tag($0) }
+            }
+
+            let paths = staffPathFences[pathsFocusStaff] ?? []
+            HStack {
+                Button("Browse allow…") { browseAllowPaths(for: pathsFocusStaff) }
+                Button("Clear") {
+                    staffPathFences[pathsFocusStaff] = []
+                }
+                .disabled(paths.isEmpty)
+            }
+
+            if paths.isEmpty {
+                Text("Chưa gán path — staff này chưa có fence từ wizard.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(paths, id: \.self) { path in
+                    HStack {
+                        Text(path)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                        Spacer()
+                        Button(role: .destructive) {
+                            staffPathFences[pathsFocusStaff] = paths.filter { $0 != path }
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            Divider()
+            Text("Tóm tắt fences")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(selectedStaffs.sorted(), id: \.self) { staff in
+                let n = staffPathFences[staff]?.count ?? 0
+                Text("\(staff): \(n == 0 ? "—" : "\(n) path(s)")")
+                    .font(.caption)
+            }
+        }
+        .onAppear {
+            if !selectedStaffs.contains(pathsFocusStaff) {
+                pathsFocusStaff = selectedStaffs.sorted().first ?? "ceo"
+            }
+        }
+    }
+
     private var confirmStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             labeled("Folder", projectRootPath)
@@ -214,6 +277,13 @@ struct AddCompanySheet: View {
             labeled(
                 "Skills (library)",
                 selectedSkillIDs.isEmpty ? "— (none extra)" : selectedSkillIDs.sorted().joined(separator: ", ")
+            )
+            labeled(
+                "Path fences",
+                selectedStaffs.sorted().map { staff in
+                    let paths = staffPathFences[staff] ?? []
+                    return paths.isEmpty ? "\(staff): —" : "\(staff): \(paths.joined(separator: ", "))"
+                }.joined(separator: " | ")
             )
             if let localError {
                 Text(localError).foregroundStyle(.red).font(.caption)
@@ -260,9 +330,23 @@ struct AddCompanySheet: View {
             return !projectRootPath.isEmpty && !name.trimmingCharacters(in: .whitespaces).isEmpty
         case .staffs:
             return selectedStaffs.contains("ceo")
-        case .skills, .confirm:
+        case .skills, .paths, .confirm:
             return true
         }
+    }
+
+    private func browseAllowPaths(for staff: String) {
+        let root = URL(fileURLWithPath: projectRootPath)
+        let urls = installer.pickAllowPaths(projectRoot: root)
+        guard !urls.isEmpty else { return }
+        var current = staffPathFences[staff] ?? []
+        for url in urls {
+            let rel = installer.relativePath(for: url, projectRoot: root)
+            if !current.contains(rel) {
+                current.append(rel)
+            }
+        }
+        staffPathFences[staff] = current
     }
 
     private func labeled(_ k: String, _ v: String) -> some View {
@@ -318,6 +402,11 @@ struct AddCompanySheet: View {
 
     private func goNext() {
         guard let next = Step(rawValue: step.rawValue + 1) else { return }
+        if next == .paths, !selectedStaffs.contains(pathsFocusStaff) {
+            pathsFocusStaff = selectedStaffs.sorted().first ?? "ceo"
+        }
+        // Drop fences for staffs no longer selected
+        staffPathFences = staffPathFences.filter { selectedStaffs.contains($0.key) }
         step = next
     }
 
@@ -337,10 +426,18 @@ struct AddCompanySheet: View {
             return
         }
 
+        var fences: [String: [String]] = [:]
+        for staff in selectedStaffs {
+            let paths = (staffPathFences[staff] ?? []).filter { !$0.isEmpty }
+            if !paths.isEmpty {
+                fences[staff] = paths
+            }
+        }
         let spec = RosterSpec(
             keep_staffs: selectedStaffs.sorted(),
             custom_staffs: [],
-            extra_skill_ids: selectedSkillIDs.sorted()
+            extra_skill_ids: selectedSkillIDs.sorted(),
+            staff_path_fences: fences
         )
 
         do {

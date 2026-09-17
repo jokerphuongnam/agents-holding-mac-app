@@ -38,6 +38,8 @@ struct RosterSpec: Encodable {
     var keep_staffs: [String]
     var custom_staffs: [CustomStaffSpec]
     var extra_skill_ids: [String]
+    /// staff name → allowed project-relative (or absolute) paths
+    var staff_path_fences: [String: [String]]
 
     struct CustomStaffSpec: Encodable {
         var name: String
