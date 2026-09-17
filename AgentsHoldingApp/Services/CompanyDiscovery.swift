@@ -66,19 +66,19 @@ struct CompanyDiscovery {
 
     private func loadChildrenFromDisk(parentCompanyPath: URL) -> [CompanyNode] {
         let childrenDir = parentCompanyPath.appendingPathComponent("children")
-        guard FileManager.default.fileExists(atPath: childrenDir.path) else { return [] }
-        let fm = FileManager.default
-        guard let items = try? fm.contentsOfDirectory(
-            at: childrenDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        // Prefer atPath — URL-based contentsOfDirectory returns [] on some .agents trees.
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: childrenDir.path) else {
+            return []
+        }
 
         var out: [CompanyNode] = []
-        for url in items {
+        for name in names where !name.hasPrefix(".") {
+            let url = childrenDir.appendingPathComponent(name)
             var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            let stem = url.lastPathComponent
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
+            let stem = name
             let meta = url.appendingPathComponent("META.toml")
             let pointer = url.appendingPathComponent("COMPANY_POINTER.md")
             let slug = parseString(fromMETA: meta, key: "slug")
@@ -92,7 +92,7 @@ struct CompanyDiscovery {
                     projectRoot: projectRoot,
                     companyPath: companyPath,
                     budget: budget,
-                    pointerPath: fm.fileExists(atPath: pointer.path) ? pointer : meta
+                    pointerPath: FileManager.default.fileExists(atPath: pointer.path) ? pointer : meta
                 )
             )
         }
@@ -142,36 +142,35 @@ struct CompanyDiscovery {
     // MARK: - Teams + staffs
 
     private func loadTeams(staffsRoot: URL) -> [TeamNode] {
-        guard FileManager.default.fileExists(atPath: staffsRoot.path) else { return [] }
-        let fm = FileManager.default
-        guard let items = try? fm.contentsOfDirectory(
-            at: staffsRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        // URL-based contentsOfDirectory(at:options:) returns [] on these trees;
+        // contentsOfDirectory(atPath:) sees the real entries (verified for marlin-language-company).
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: staffsRoot.path) else {
+            return []
+        }
 
         var teams: [TeamNode] = []
-        for url in items {
+        for name in names where !name.hasPrefix(".") {
+            let url = staffsRoot.appendingPathComponent(name)
             var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            let teamName = url.lastPathComponent
-            let staffs = loadStaffs(inTeamDir: url, team: teamName)
-            teams.append(TeamNode(name: teamName, staffs: staffs))
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
+            let staffs = loadStaffs(inTeamDir: url, team: name)
+            teams.append(TeamNode(name: name, staffs: staffs))
         }
         return teams.sorted { $0.name < $1.name }
     }
 
     private func loadStaffs(inTeamDir teamDir: URL, team: String) -> [StaffNode] {
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: teamDir,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: teamDir.path) else {
+            return []
+        }
 
-        return files
-            .filter { $0.pathExtension == "md" }
-            .map { file -> StaffNode in
-                let name = file.deletingPathExtension().lastPathComponent
+        return names
+            .filter { $0.hasSuffix(".md") && !$0.hasPrefix(".") }
+            .map { fileName -> StaffNode in
+                let file = teamDir.appendingPathComponent(fileName)
+                let name = (fileName as NSString).deletingPathExtension
                 return StaffNode(name: name, team: team, blurb: firstBlurb(in: file) ?? "")
             }
             .sorted { $0.name < $1.name }
