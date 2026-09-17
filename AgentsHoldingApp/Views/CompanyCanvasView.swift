@@ -103,8 +103,9 @@ struct CompanyCanvasView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
+                let reportCounts = StaffDirectory().reportCounts(companyRoot: snap.companyRoot)
                 ForEach(snap.teams) { team in
-                    TeamBlock(team: team) { staff in
+                    TeamBlock(team: team, reportCounts: reportCounts) { staff in
                         appModel.openStaff(staff, inHolding: false)
                     }
                 }
@@ -115,6 +116,7 @@ struct CompanyCanvasView: View {
 
 struct TeamBlock: View {
     let team: TeamNode
+    var reportCounts: [String: Int] = [:]
     let onStaff: (StaffNode) -> Void
 
     private var columns: [GridItem] {
@@ -140,7 +142,7 @@ struct TeamBlock: View {
             } else {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(team.staffs) { staff in
-                        StaffCard(staff: staff) {
+                        StaffCard(staff: staff, reportCount: reportCounts[staff.name] ?? 0) {
                             onStaff(staff)
                         }
                     }
@@ -155,12 +157,23 @@ struct TeamBlock: View {
 
 struct StaffCard: View {
     let staff: StaffNode
+    var reportCount: Int = 0
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
-                Image(systemName: "person.fill")
+                HStack {
+                    Image(systemName: "person.fill")
+                    if reportCount > 0 {
+                        Spacer()
+                        Text("\(reportCount) cấp dưới")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: Capsule())
+                    }
+                }
                 Text(staff.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)

@@ -95,26 +95,59 @@ struct StaffDetailView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Cấp dưới (mình hop → họ)")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Cấp dưới (mình hop → họ)")
+                        .foregroundStyle(.secondary)
+                    if !detail.reports.isEmpty {
+                        Text("\(detail.reports.count)")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: Capsule())
+                    }
+                }
                 if detail.reports.isEmpty {
                     Text("Không hop xuống staff nào (leaf)")
                         .foregroundStyle(.tertiary)
                 } else {
-                    ForEach(detail.reports) { report in
-                        Button {
-                            appModel.openStaff(report, inHolding: appModel.openCompany == nil)
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.fill")
-                                Text(report.name)
-                                Text("· \(report.team)")
-                                    .foregroundStyle(.secondary)
+                    VStack(spacing: 0) {
+                        ForEach(detail.reports) { report in
+                            Button {
+                                appModel.openStaff(report, inHolding: appModel.openCompany == nil)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "person.fill")
+                                        .foregroundStyle(.accentColor)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(report.name)
+                                            .fontWeight(.semibold)
+                                        Text(report.team)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        if !report.blurb.isEmpty {
+                                            Text(report.blurb)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 8)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Mở detail \(report.name)")
+                            if report.id != detail.reports.last?.id {
+                                Divider()
                             }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .background(.background.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
                 }
             }
         }

@@ -76,8 +76,9 @@ struct HoldingCanvasView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
+                let reportCounts = StaffDirectory().reportCounts(companyRoot: holding.packageRoot)
                 ForEach(holding.teams) { team in
-                    TeamBlock(team: team) { staff in
+                    TeamBlock(team: team, reportCounts: reportCounts) { staff in
                         appModel.openStaff(staff, inHolding: true)
                     }
                 }

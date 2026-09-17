@@ -93,6 +93,7 @@ struct HoldingDiscovery {
 
         return HoldingSnapshot(
             path: holdingRoot,
+            packageRoot: root,
             name: holdingRoot.lastPathComponent,
             companies: companies,
             teams: teams

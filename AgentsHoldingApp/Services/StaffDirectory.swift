@@ -2,6 +2,20 @@ import Foundation
 
 /// Shared roster + staff detail (agents.tsv, staffs/**, skills/**, SCOPE.md).
 struct StaffDirectory {
+    /// How many direct reports each staff has (hop subordinates).
+    func reportCounts(companyRoot: URL) -> [String: Int] {
+        let agents = loadAgentsTSV(companyRoot: companyRoot)
+        let names = loadTeams(companyRoot: companyRoot).flatMap(\.staffs).map(\.name)
+        var counts: [String: Int] = [:]
+        for name in names {
+            let n = names.filter {
+                resolveLead(name: $0, row: agents[$0], agents: agents, companyRoot: companyRoot) == name
+            }.count
+            if n > 0 { counts[name] = n }
+        }
+        return counts
+    }
+
     func loadTeams(companyRoot: URL) -> [TeamNode] {
         let staffsRoot = companyRoot.appendingPathComponent("system/staffs")
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: staffsRoot.path) else {

@@ -2,6 +2,8 @@ import Foundation
 
 struct HoldingSnapshot: Equatable {
     var path: URL
+    /// Package root that contains `system/staffs` (often `…/holding`).
+    var packageRoot: URL
     var name: String
     /// Holding inventory companies (registry).
     var companies: [CompanyNode]
