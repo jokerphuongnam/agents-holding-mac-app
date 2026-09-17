@@ -38,19 +38,38 @@ struct CompanyDiscovery {
     // MARK: - Children
 
     private func loadChildren(parentCompanyPath: URL, holdingRoot: URL?) -> [CompanyNode] {
-        var byKey: [String: CompanyNode] = [:]
+        // Under one parent, the same child often appears twice: children_registry row
+        // (id=hash) + children/<stem>/META.toml pointer (id=slug|root). Dedupe by
+        // company_path, then project_root, then slug — prefer registry.
+        let registry = loadChildrenFromRegistry(parentCompanyPath: parentCompanyPath, holdingRoot: holdingRoot)
+        let disk = loadChildrenFromDisk(parentCompanyPath: parentCompanyPath)
+        return dedupeChildren(registryFirst: registry, disk: disk)
+    }
 
-        for child in loadChildrenFromRegistry(parentCompanyPath: parentCompanyPath, holdingRoot: holdingRoot) {
-            byKey[holdingDiscovery.publicIdentityKey(child)] = child
-        }
-        for child in loadChildrenFromDisk(parentCompanyPath: parentCompanyPath) {
-            let key = holdingDiscovery.publicIdentityKey(child)
-            if byKey[key] == nil {
-                byKey[key] = child
+    private func dedupeChildren(registryFirst: [CompanyNode], disk: [CompanyNode]) -> [CompanyNode] {
+        var out: [CompanyNode] = []
+        var seenPath = Set<String>()
+        var seenSlug = Set<String>()
+
+        func absorb(_ child: CompanyNode) {
+            let pathKey = (child.companyPath?.path ?? child.projectRoot?.path ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !pathKey.isEmpty {
+                if seenPath.contains(pathKey) { return }
+                seenPath.insert(pathKey)
+                seenSlug.insert(child.slug)
+                out.append(child)
+                return
             }
+            if seenSlug.contains(child.slug) { return }
+            seenSlug.insert(child.slug)
+            out.append(child)
         }
 
-        return byKey.values.sorted {
+        for child in registryFirst { absorb(child) }
+        for child in disk { absorb(child) }
+
+        return out.sorted {
             if $0.slug != $1.slug { return $0.slug < $1.slug }
             return ($0.projectRoot?.path ?? "") < ($1.projectRoot?.path ?? "")
         }
