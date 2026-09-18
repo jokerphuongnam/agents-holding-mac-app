@@ -9,6 +9,11 @@ struct RootView: View {
         } detail: {
             detail
         }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                LanguagePickerButton()
+            }
+        }
     }
 
     @ViewBuilder
@@ -32,9 +37,19 @@ struct RootView: View {
 
 struct SidebarView: View {
     @EnvironmentObject private var appModel: AppModel
+    @EnvironmentObject private var languageStore: LanguageStore
 
     var body: some View {
         List {
+            Section(L10n.languageSection) {
+                Picker(L10n.languagePicker, selection: $languageStore.language) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+            }
             Section(L10n.navigate) {
                 Button(L10n.holding) { appModel.backToHolding() }
                 Button(L10n.usage) { appModel.selection = .usage }
