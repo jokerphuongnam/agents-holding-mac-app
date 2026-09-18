@@ -16,6 +16,8 @@ build/
 .Build/
 .swiftpm/
 Packages/
+BuildTools/.build/
+BuildTools/.swiftpm/
 
 # SwiftGen / codegen
 AgentsHoldingApp/Generated/

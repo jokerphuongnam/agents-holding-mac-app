@@ -14,22 +14,23 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 - Xcode 15+ (tested with Xcode 27 / Swift 6 toolchain)
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Network once to resolve SPM:
-  - [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (`MarkdownUI`) — skill markdown
-  - [HighlightSwift](https://github.com/appstefan/HighlightSwift) — script syntax highlight (python/bash/…)
+  - App: [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui), [HighlightSwift](https://github.com/appstefan/HighlightSwift)
+  - BuildTools: [SwiftGen](https://github.com/SwiftGen/SwiftGen) (no Homebrew — `swift run` via `BuildTools/`)
 
 ## Setup
 
 ```bash
 cd ~/Documents/Agents/agents-holding-app
-./Scripts/generate.sh          # SwiftGen + XcodeGen → AgentsHoldingApp.xcodeproj
+./Scripts/generate.sh          # SPM-fetch SwiftGen + run it; XcodeGen → .xcodeproj
 open AgentsHoldingApp.xcodeproj
-# Xcode resolves SPM on first open (MarkdownUI, HighlightSwift)
+# Xcode resolves app SPM on first open (MarkdownUI, HighlightSwift)
 ```
 
-`AgentsHoldingApp.xcodeproj/` and `AgentsHoldingApp/Generated/` are **gitignored** — always regenerate via `./Scripts/generate.sh`.
+SwiftGen is **not** installed globally — `BuildTools/Package.swift` pulls it with SPM; `generate.sh` runs `swift run --package-path BuildTools/.build/checkouts/SwiftGen …`.
 
-Xcode **Run** also runs `Scripts/generate.sh` with `SKIP_XCODEGEN=1` (SwiftGen only) as a pre-build phase.
+Gitignored (regenerate locally): `AgentsHoldingApp.xcodeproj/`, `AgentsHoldingApp/Generated/`, `BuildTools/.build/`.
 
+Xcode **Run** pre-build: `SKIP_XCODEGEN=1 ./Scripts/generate.sh` (SwiftGen only).
 Holding path resolution (first match wins):
 
 1. Env `AGENTS_HOLDING_PATH`
