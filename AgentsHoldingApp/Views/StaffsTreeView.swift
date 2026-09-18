@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Staffs org graph — top is senior, below are reports (no arrowheads).
-///
-/// Layout goals: no overlapping cards, wrap when many teams, compact member
-/// grids, 2D scroll. Card ids stay stable for a later chat/call-path overlay.
+/// Staffs org graph — top is senior, below are reports.
+/// Keeps A–B connector routes (T-junction) but **no arrowheads**.
+/// Many siblings wrap into rows so the chart stays readable; 2D scroll.
+/// Card ids stay stable for a later chat/call-path overlay.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
 
-    private let viewportMaxHeight: CGFloat = 480
+    private let viewportMaxHeight: CGFloat = 520
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -24,12 +24,12 @@ struct StaffsTreeView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                    VStack(alignment: .center, spacing: 20) {
+                    VStack(alignment: .center, spacing: 24) {
                         ForEach(roots) { root in
                             OrgNodeView(node: root, depth: 0, onSelect: onSelect)
                         }
                     }
-                    .padding(12)
+                    .padding(16)
                     .frame(minWidth: 320, alignment: .top)
                 }
                 .frame(maxWidth: .infinity, maxHeight: viewportMaxHeight, alignment: .topLeading)
@@ -40,124 +40,119 @@ struct StaffsTreeView: View {
     }
 }
 
-/// One staff + its reports. Branches wrap; leaf members use an adaptive grid.
+// MARK: - Node
+
 private struct OrgNodeView: View {
     let node: StaffTreeNode
     let depth: Int
     let onSelect: (StaffNode) -> Void
 
     private let cardWidth: CGFloat = 140
-    private let teamSpacing: CGFloat = 16
-    private let wrapAfter: Int = 3
-
-    private var branches: [StaffTreeNode] {
-        node.children.filter { !$0.children.isEmpty }
-    }
-
-    private var leaves: [StaffTreeNode] {
-        node.children.filter { $0.children.isEmpty }
-    }
+    private let siblingGap: CGFloat = 20
+    private let perRow: Int = 3
+    private let lineColor = Color.secondary.opacity(0.55)
+    private let lineWidth: CGFloat = 2
+    private let stemHeight: CGFloat = 14
+    private let dropHeight: CGFloat = 14
 
     var body: some View {
-        VStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .center, spacing: 0) {
             staffCard(node.staff, emphasized: depth == 0)
 
             if !node.children.isEmpty {
-                reportsBlock
+                // Stem from this card down to the first fan bar (no arrowhead).
+                Rectangle()
+                    .fill(lineColor)
+                    .frame(width: lineWidth, height: stemHeight)
+
+                childrenFans(node.children)
             }
         }
     }
 
-    @ViewBuilder
-    private var reportsBlock: some View {
-        VStack(alignment: .center, spacing: 14) {
-            if !branches.isEmpty {
-                branchLayout
-            }
-            if !leaves.isEmpty {
-                leafGrid(leaves)
-                    .frame(maxWidth: depth == 0 ? 640 : 320)
-            }
-        }
-        .padding(depth == 0 ? 0 : 10)
-        .background {
-            if depth > 0 {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.secondary.opacity(0.08))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var branchLayout: some View {
-        let kids = branches
-        if kids.count > wrapAfter {
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(minimum: cardWidth), spacing: teamSpacing),
-                    GridItem(.flexible(minimum: cardWidth), spacing: teamSpacing),
-                    GridItem(.flexible(minimum: cardWidth), spacing: teamSpacing),
-                ],
-                alignment: .center,
-                spacing: teamSpacing
-            ) {
-                ForEach(kids) { child in
-                    teamBlock(child)
+    /// Chunk children into rows of `perRow`, each row a classic T-fan.
+    private func childrenFans(_ children: [StaffTreeNode]) -> some View {
+        let rows = chunk(children, size: perRow)
+        return VStack(alignment: .center, spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                if index > 0 {
+                    // Continuing spine between wrapped rows.
+                    Rectangle()
+                        .fill(lineColor)
+                        .frame(width: lineWidth, height: stemHeight)
                 }
+                fanRow(row)
             }
-            .frame(maxWidth: 720)
-        } else {
-            HStack(alignment: .top, spacing: teamSpacing) {
-                ForEach(kids) { child in
-                    teamBlock(child)
+        }
+    }
+
+    /// One horizontal T: piece-wise bar (continuous A–B) + drop per child, no arrow.
+    private func fanRow(_ children: [StaffTreeNode]) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                VStack(alignment: .center, spacing: 0) {
+                    connectorCap(
+                        isFirst: index == 0,
+                        isLast: index == children.count - 1,
+                        alone: children.count == 1
+                    )
+                    OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                        .padding(.horizontal, siblingGap / 2)
                 }
             }
         }
     }
 
-    /// Lead + its leaf members as one visual team unit.
-    private func teamBlock(_ child: StaffTreeNode) -> some View {
-        VStack(alignment: .center, spacing: 10) {
-            staffCard(child.staff, emphasized: false)
-            if !child.children.isEmpty {
-                // Nested branches (rare) recurse; pure leaves use grid.
-                let nestedBranches = child.children.filter { !$0.children.isEmpty }
-                let nestedLeaves = child.children.filter { $0.children.isEmpty }
-                if !nestedBranches.isEmpty {
-                    HStack(alignment: .top, spacing: teamSpacing) {
-                        ForEach(nestedBranches) { grand in
-                            OrgNodeView(node: grand, depth: depth + 2, onSelect: onSelect)
+    /// Top of each sibling column: left/right bar halves + center drop.
+    /// Adjacent columns touch (spacing 0) so the bar reads as one continuous line.
+    private func connectorCap(isFirst: Bool, isLast: Bool, alone: Bool) -> some View {
+        ZStack {
+            HStack(spacing: 0) {
+                if alone {
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: lineWidth)
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: lineWidth)
+                } else {
+                    Group {
+                        if isFirst {
+                            Color.clear
+                        } else {
+                            lineColor
                         }
                     }
-                }
-                if !nestedLeaves.isEmpty {
-                    leafGrid(nestedLeaves)
-                        .frame(maxWidth: 300)
+                    .frame(maxWidth: .infinity, maxHeight: lineWidth)
+
+                    Group {
+                        if isLast {
+                            Color.clear
+                        } else {
+                            lineColor
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: lineWidth)
                 }
             }
+            .frame(height: lineWidth)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            // Vertical drop from bar to child card (no arrowhead).
+            Rectangle()
+                .fill(lineColor)
+                .frame(width: lineWidth, height: dropHeight)
         }
-        .padding(10)
-        .frame(minWidth: cardWidth)
-        .background(
-            Color.secondary.opacity(0.1),
-            in: RoundedRectangle(cornerRadius: 12)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 1)
-        )
+        .frame(height: dropHeight)
+        .frame(maxWidth: .infinity)
     }
 
-    private func leafGrid(_ nodes: [StaffTreeNode]) -> some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: cardWidth - 8), spacing: 8)],
-            alignment: .center,
-            spacing: 8
-        ) {
-            ForEach(nodes) { leaf in
-                staffCard(leaf.staff, emphasized: false)
-            }
+    private func chunk<T>(_ items: [T], size: Int) -> [[T]] {
+        guard size > 0, !items.isEmpty else { return items.isEmpty ? [] : [items] }
+        var rows: [[T]] = []
+        var i = 0
+        while i < items.count {
+            let end = min(i + size, items.count)
+            rows.append(Array(items[i..<end]))
+            i = end
         }
+        return rows
     }
 
     private func staffCard(_ staff: StaffNode, emphasized: Bool) -> some View {
@@ -195,7 +190,7 @@ private struct OrgNodeView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(
-                        emphasized ? Color.accentColor.opacity(0.55) : Color.secondary.opacity(0.2),
+                        emphasized ? Color.accentColor.opacity(0.55) : Color.secondary.opacity(0.22),
                         lineWidth: 1
                     )
             )

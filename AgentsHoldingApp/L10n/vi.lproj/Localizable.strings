@@ -53,7 +53,7 @@
 "no_staffs_in_team" = "Không có staff trong team này";
 "staffs_tree" = "Staffs tree";
 "staffs_tree_empty" = "Không có staff để hiện cây tổ chức";
-"staffs_tree_help" = "Trên là cấp trên, dưới là cấp dưới (không mũi tên). Team tự xuống hàng; cuộn để xem. Bấm thẻ để mở staff.";
+"staffs_tree_help" = "Trên là cấp trên, dưới là cấp dưới. Giữ đường nối A–B (không mũi tên). Anh/em xuống hàng khi nhiều; cuộn để xem.";
 "company_scripts" = "Scripts company (install)";
 "company_scripts_empty" = "Không có script install cấp company";
 "company_skills" = "Skills company";
