@@ -18,7 +18,11 @@ struct HoldingCanvasView: View {
                     VStack(alignment: .leading, spacing: 28) {
                         header(holding)
                         companiesSection(holding)
-                        teamsSection(holding)
+                        StaffsTreeView(
+                            roots: StaffDirectory().buildStaffTree(companyRoot: holding.packageRoot)
+                        ) { staff in
+                            appModel.openStaff(staff, inHolding: true)
+                        }
                     }
                     .padding(24)
                 }
@@ -95,25 +99,6 @@ struct HoldingCanvasView: View {
         }
     }
 
-    @ViewBuilder
-    private func teamsSection(_ holding: HoldingSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label(L10n.holdingStaffs, systemImage: "person.3")
-                .font(.headline)
-            if holding.teams.isEmpty {
-                Text(L10n.holdingStaffsEmpty)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                let reportCounts = StaffDirectory().reportCounts(companyRoot: holding.packageRoot)
-                ForEach(holding.teams) { team in
-                    TeamBlock(team: team, reportCounts: reportCounts) { staff in
-                        appModel.openStaff(staff, inHolding: true)
-                    }
-                }
-            }
-        }
-    }
 }
 
 struct CompanyCard: View {

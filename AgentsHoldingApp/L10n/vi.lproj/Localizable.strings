@@ -51,6 +51,8 @@
 "teams_staffs" = "Teams & staffs";
 "no_teams" = "Không có team dưới system/staffs";
 "no_staffs_in_team" = "Không có staff trong team này";
+"staffs_tree" = "Staffs tree";
+"staffs_tree_empty" = "Không có staff để hiện cây tổ chức";
 "company_scripts" = "Scripts company (install)";
 "company_scripts_empty" = "Không có script install cấp company";
 "company_skills" = "Skills company";

@@ -95,7 +95,7 @@ struct StaffDirectory {
     }
 
     /// Who can hop/Assign orders to `name`.
-    private func resolveLead(
+    func resolveLead(
         name: String,
         row: AgentRow?,
         agents: [String: AgentRow],

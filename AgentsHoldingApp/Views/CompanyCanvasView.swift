@@ -12,7 +12,11 @@ struct CompanyCanvasView: View {
                         header(snap)
 
                         childrenSection(snap)
-                        teamsSection(snap)
+                        StaffsTreeView(
+                            roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot)
+                        ) { staff in
+                            appModel.openStaff(staff, inHolding: false)
+                        }
                         // Only company-scoped assets here; role skills/scripts live on staff detail.
                         if !snap.skills.isEmpty {
                             FileListSection(
@@ -117,26 +121,6 @@ struct CompanyCanvasView: View {
         }
     }
 
-    @ViewBuilder
-    private func teamsSection(_ snap: CompanySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label(L10n.teamsStaffs, systemImage: "person.3")
-                .font(.headline)
-
-            if snap.teams.isEmpty {
-                Text(L10n.noTeams)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                let reportCounts = StaffDirectory().reportCounts(companyRoot: snap.companyRoot)
-                ForEach(snap.teams) { team in
-                    TeamBlock(team: team, reportCounts: reportCounts) { staff in
-                        appModel.openStaff(staff, inHolding: false)
-                    }
-                }
-            }
-        }
-    }
 }
 
 struct TeamBlock: View {

@@ -51,6 +51,8 @@
 "teams_staffs" = "Teams & staffs";
 "no_teams" = "No teams under system/staffs";
 "no_staffs_in_team" = "No staffs in this team";
+"staffs_tree" = "Staffs tree";
+"staffs_tree_empty" = "No staffs to show in the org tree";
 "company_scripts" = "Company scripts (install)";
 "company_scripts_empty" = "No company-wide install scripts";
 "company_skills" = "Company skills";
