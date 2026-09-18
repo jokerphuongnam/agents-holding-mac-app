@@ -1,13 +1,18 @@
+import AppKit
 import SwiftUI
 
 /// Staffs org graph — top is senior, below are reports.
 /// Connectors **stop at card edges** (never run through a card body).
 /// Large leaf teams: left/right stacks + center gutter spine.
+/// Zoom: **Control + scroll wheel** (also trackpad pinch).
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
 
     private let viewportMaxHeight: CGFloat = 560
+
+    @StateObject private var zoomState = OrgGraphZoomState()
+    @State private var contentSize: CGSize = .zero
 
     /// Prefer classic CEO roots when centering the viewport.
     private var focusRootId: String? {
@@ -20,8 +25,21 @@ struct StaffsTreeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(L10n.staffsTree, systemImage: "person.3")
-                .font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Label(L10n.staffsTree, systemImage: "person.3")
+                    .font(.headline)
+                Spacer()
+                if !roots.isEmpty {
+                    Text("\(Int((zoomState.zoom * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Button(L10n.staffsTreeZoomReset) {
+                        withAnimation(.easeOut(duration: 0.2)) { zoomState.reset() }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(abs(zoomState.zoom - 1) < 0.01)
+                }
+            }
             Text(L10n.staffsTreeHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -33,27 +51,62 @@ struct StaffsTreeView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                        VStack(alignment: .center, spacing: 28) {
-                            ForEach(roots) { root in
-                                OrgNodeView(node: root, depth: 0, onSelect: onSelect)
-                            }
-                        }
-                        .padding(16)
-                        .frame(minWidth: 320, alignment: .top)
-                        .coordinateSpace(name: OrgChartSpace.name)
+                        graphContent
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: OrgContentSizeKey.self,
+                                        value: geo.size
+                                    )
+                                }
+                            )
+                            .scaleEffect(zoomState.zoom, anchor: .topLeading)
+                            .frame(
+                                width: max(contentSize.width * zoomState.zoom, 320 * zoomState.zoom),
+                                height: max(contentSize.height * zoomState.zoom, 1),
+                                alignment: .topLeading
+                            )
                     }
                     .frame(maxWidth: .infinity, maxHeight: viewportMaxHeight, alignment: .topLeading)
                     .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .onHover { zoomState.isHovered = $0 }
+                    .gesture(pinchZoomGesture)
                     .onAppear {
+                        zoomState.installControlScrollMonitor()
                         scrollCEOToCenter(proxy)
+                    }
+                    .onDisappear {
+                        zoomState.removeControlScrollMonitor()
                     }
                     .onChange(of: focusRootId) { _, _ in
                         scrollCEOToCenter(proxy)
                     }
+                    .onPreferenceChange(OrgContentSizeKey.self) { contentSize = $0 }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var graphContent: some View {
+        VStack(alignment: .center, spacing: 28) {
+            ForEach(roots) { root in
+                OrgNodeView(node: root, depth: 0, onSelect: onSelect)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 320, alignment: .top)
+        .coordinateSpace(name: OrgChartSpace.name)
+    }
+
+    private var pinchZoomGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                zoomState.applyPinch(value)
+            }
+            .onEnded { _ in
+                zoomState.endPinch()
+            }
     }
 
     /// Center the CEO card in the graph viewport (after layout settles).
@@ -70,8 +123,69 @@ struct StaffsTreeView: View {
     }
 }
 
+/// Reference-type zoom state so Control+scroll NSEvent monitor sees live hover/zoom.
+private final class OrgGraphZoomState: ObservableObject {
+    @Published var zoom: CGFloat = 1.0
+    var isHovered = false
+    private var pinchBase: CGFloat = 1.0
+    private var scrollMonitor: Any?
+
+    private let zoomMin: CGFloat = 0.4
+    private let zoomMax: CGFloat = 2.5
+
+    func reset() {
+        zoom = 1.0
+        pinchBase = 1.0
+    }
+
+    func applyPinch(_ magnification: CGFloat) {
+        zoom = min(max(pinchBase * magnification, zoomMin), zoomMax)
+    }
+
+    func endPinch() {
+        pinchBase = zoom
+    }
+
+    func installControlScrollMonitor() {
+        removeControlScrollMonitor()
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, self.isHovered, event.modifierFlags.contains(.control) else {
+                return event
+            }
+            let delta = event.scrollingDeltaY
+            let step = event.hasPreciseScrollingDeltas ? delta * 0.004 : delta * 0.06
+            let next = min(max(self.zoom + step, self.zoomMin), self.zoomMax)
+            if abs(next - self.zoom) > 0.0001 {
+                DispatchQueue.main.async {
+                    self.zoom = next
+                    self.pinchBase = next
+                }
+            }
+            return nil
+        }
+    }
+
+    func removeControlScrollMonitor() {
+        if let scrollMonitor {
+            NSEvent.removeMonitor(scrollMonitor)
+            self.scrollMonitor = nil
+        }
+    }
+
+    deinit {
+        removeControlScrollMonitor()
+    }
+}
+
 private enum OrgScrollAnchor {
     static func card(_ staffId: String) -> String { "org-card-\(staffId)" }
+}
+
+private struct OrgContentSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
+    }
 }
 
 // MARK: - Layout
