@@ -107,6 +107,12 @@ struct UsageQuery: Equatable {
     var bucket: UsageBucket
 }
 
+struct UsageModelBreakdown: Hashable, Identifiable {
+    var id: String { model }
+    var model: String
+    var tokens: Int
+}
+
 struct UsageTableColumn: Hashable, Identifiable {
     var id: String { key }
     var key: String
