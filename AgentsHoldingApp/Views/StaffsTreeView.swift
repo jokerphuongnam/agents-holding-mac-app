@@ -1,14 +1,15 @@
 import SwiftUI
 
 /// Staffs org graph — top is senior, below are reports.
-/// T-junction A–B routes **without arrowheads**. Lines are drawn to each
-/// **card midpoint** (PreferenceKey), so wide subtrees (desk-garden game-lead
-/// ×5, CEO ×~10) do not skew connectors.
+/// T-routes **without arrowheads**, drawn to card anchors.
+///
+/// Teams with many leaf staffs (desk-garden game-lead ×5, backend ×4):
+/// split into **left | center spine | right** columns so a horizontal bar
+/// never runs through a middle card.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
 
-    /// Tuned against desk-garden (~8 teams, CEO fan ~10, game-lead 5).
     private let viewportMaxHeight: CGFloat = 560
 
     var body: some View {
@@ -42,18 +43,21 @@ struct StaffsTreeView: View {
     }
 }
 
-// MARK: - Layout constants (desk-garden)
+// MARK: - Layout (desk-garden tuned)
 
 private enum OrgLayout {
     static let cardWidth: CGFloat = 140
     static let siblingGap: CGFloat = 24
-    /// CEO has ~10 direct reports on desk-garden — wrap every 3.
-    static let perRow: Int = 3
+    /// Gutter between left/right stacks — center spine lives here.
+    static let centerGutter: CGFloat = 40
+    static let stackGap: CGFloat = 12
+    /// ≥ this many leaf members → left/right split (avoids bar-through-card).
+    static let splitThreshold: Int = 4
     static let stem: CGFloat = 16
     static let drop: CGFloat = 16
+    static let stub: CGFloat = 10
     static let lineWidth: CGFloat = 2
     static let lineColor = Color.secondary.opacity(0.6)
-    /// Vertical space reserved above each child row for stem/bar/drop.
     static var connectorReserve: CGFloat { stem + drop }
 }
 
@@ -61,7 +65,13 @@ private enum OrgChartSpace {
     static let name = "orgChart"
 }
 
-/// Card frames in `OrgChartSpace` — used to draw connectors to card centers.
+private enum OrgFanStyle {
+    /// One horizontal T above siblings (few children / branch leads).
+    case fan
+    /// Two stacks + center spine (many leaf staffs on one team).
+    case splitSides
+}
+
 private struct CardFrameKey: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
@@ -76,16 +86,25 @@ private struct OrgNodeView: View {
     let depth: Int
     let onSelect: (StaffNode) -> Void
 
+    private var fanStyle: OrgFanStyle {
+        let kids = node.children
+        guard !kids.isEmpty else { return .fan }
+        let allLeaves = kids.allSatisfy { $0.children.isEmpty }
+        if allLeaves, kids.count >= OrgLayout.splitThreshold {
+            return .splitSides
+        }
+        return .fan
+    }
+
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             staffCard(node.staff, emphasized: depth == 0)
                 .background(cardAnchor(node.staff.id))
 
             if !node.children.isEmpty {
-                // Reserve room for T-connectors drawn in the overlay.
                 Color.clear
                     .frame(height: OrgLayout.connectorReserve)
-                childrenFans(node.children)
+                childrenLayout(node.children, style: fanStyle)
             }
         }
         .overlayPreferenceValue(CardFrameKey.self) { frames in
@@ -94,6 +113,7 @@ private struct OrgNodeView: View {
                 OrgConnectorCanvas(
                     parentId: node.staff.id,
                     childIds: node.children.map(\.staff.id),
+                    style: fanStyle,
                     frames: frames,
                     origin: origin
                 )
@@ -110,33 +130,32 @@ private struct OrgNodeView: View {
         }
     }
 
-    private func childrenFans(_ children: [StaffTreeNode]) -> some View {
-        // Leaves (no subtree) may wrap — short rows, connectors stay clean.
-        // Branches (leads with members) stay on one row + horizontal scroll so a
-        // spine never runs through tall team content (desk-garden CEO × ~10).
-        let allLeaves = children.allSatisfy { $0.children.isEmpty }
-        let rows = allLeaves ? chunk(children, size: OrgLayout.perRow) : [children]
-        return VStack(alignment: .center, spacing: OrgLayout.connectorReserve) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(alignment: .top, spacing: OrgLayout.siblingGap) {
-                    ForEach(row) { child in
+    @ViewBuilder
+    private func childrenLayout(_ children: [StaffTreeNode], style: OrgFanStyle) -> some View {
+        switch style {
+        case .fan:
+            HStack(alignment: .top, spacing: OrgLayout.siblingGap) {
+                ForEach(children) { child in
+                    OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                }
+            }
+        case .splitSides:
+            let mid = (children.count + 1) / 2
+            let left = Array(children.prefix(mid))
+            let right = Array(children.suffix(children.count - mid))
+            HStack(alignment: .top, spacing: OrgLayout.centerGutter) {
+                VStack(spacing: OrgLayout.stackGap) {
+                    ForEach(left) { child in
+                        OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                    }
+                }
+                VStack(spacing: OrgLayout.stackGap) {
+                    ForEach(right) { child in
                         OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
                     }
                 }
             }
         }
-    }
-
-    private func chunk<T>(_ items: [T], size: Int) -> [[T]] {
-        guard size > 0, !items.isEmpty else { return items.isEmpty ? [] : [items] }
-        var rows: [[T]] = []
-        var i = 0
-        while i < items.count {
-            let end = min(i + size, items.count)
-            rows.append(Array(items[i..<end]))
-            i = end
-        }
-        return rows
     }
 
     private func staffCard(_ staff: StaffNode, emphasized: Bool) -> some View {
@@ -192,12 +211,12 @@ private struct OrgNodeView: View {
     }
 }
 
-// MARK: - Connectors (card-center accurate)
+// MARK: - Connectors
 
-/// Draws stem + per-row horizontal bars + drops into each child **card** top center.
 private struct OrgConnectorCanvas: View {
     let parentId: String
     let childIds: [String]
+    let style: OrgFanStyle
     let frames: [String: CGRect]
     let origin: CGPoint
 
@@ -218,74 +237,112 @@ private struct OrgConnectorCanvas: View {
 
             let parent = local(parentGlobal)
             let kids = kidsGlobal.map(local)
-
-            // Group children into visual rows by similar top Y (wrap rows).
-            let sorted = kids.sorted { $0.minY < $1.minY || ($0.minY == $1.minY && $0.midX < $1.midX) }
-            var rows: [[CGRect]] = []
-            for rect in sorted {
-                if var last = rows.last, let sample = last.first,
-                   abs(sample.minY - rect.minY) < 8 {
-                    last.append(rect)
-                    rows[rows.count - 1] = last.sorted { $0.midX < $1.midX }
-                } else {
-                    rows.append([rect])
-                }
-            }
+            let parentBottom = CGPoint(x: parent.midX, y: parent.maxY)
 
             var path = Path()
-            let parentBottom = CGPoint(x: parent.midX, y: parent.maxY)
-            guard let firstRow = rows.first else { return }
-
-            // Bar Y sits just above the card tops of that row.
-            func barY(for row: [CGRect]) -> CGFloat {
-                (row.map(\.minY).min() ?? 0) - OrgLayout.drop
-            }
-
-            let y0 = barY(for: firstRow)
-            // Stem: parent card bottom → first row bar.
-            path.move(to: parentBottom)
-            path.addLine(to: CGPoint(x: parentBottom.x, y: y0))
-
-            for (index, row) in rows.enumerated() {
-                let y = barY(for: row)
-                guard let left = row.first, let right = row.last else { continue }
-
-                if index > 0 {
-                    // Spine between wrapped rows (centered on parent).
-                    let prevY = barY(for: rows[index - 1])
-                    path.move(to: CGPoint(x: parentBottom.x, y: prevY))
-                    path.addLine(to: CGPoint(x: parentBottom.x, y: y))
-                }
-
-                // Horizontal bar across this row’s card centers.
-                if row.count == 1 {
-                    // Single child: stem already at parent midX; jog to child midX if needed.
-                    if abs(left.midX - parentBottom.x) > 0.5 {
-                        path.move(to: CGPoint(x: parentBottom.x, y: y))
-                        path.addLine(to: CGPoint(x: left.midX, y: y))
-                    }
-                } else {
-                    path.move(to: CGPoint(x: left.midX, y: y))
-                    path.addLine(to: CGPoint(x: right.midX, y: y))
-                    // Join stem/spine to the bar.
-                    path.move(to: CGPoint(x: parentBottom.x, y: y))
-                    let clampedX = min(max(parentBottom.x, left.midX), right.midX)
-                    path.addLine(to: CGPoint(x: clampedX, y: y))
-                }
-
-                // Drops into each card top center (no arrowhead).
-                for kid in row {
-                    path.move(to: CGPoint(x: kid.midX, y: y))
-                    path.addLine(to: CGPoint(x: kid.midX, y: kid.minY))
-                }
+            switch style {
+            case .fan:
+                drawFan(path: &path, parentBottom: parentBottom, kids: kids)
+            case .splitSides:
+                drawSplitSides(path: &path, parentBottom: parentBottom, kids: kids)
             }
 
             context.stroke(
                 path,
                 with: .color(OrgLayout.lineColor),
-                style: StrokeStyle(lineWidth: OrgLayout.lineWidth, lineCap: .square, lineJoin: .miter)
+                style: StrokeStyle(
+                    lineWidth: OrgLayout.lineWidth,
+                    lineCap: .square,
+                    lineJoin: .miter
+                )
             )
         }
         .allowsHitTesting(false)
+    }
+
+    /// Classic T above a single row — bar stays above cards, never through them.
+    private func drawFan(path: inout Path, parentBottom: CGPoint, kids: [CGRect]) {
+        let row = kids.sorted { $0.midX < $1.midX }
+        guard let left = row.first, let right = row.last else { return }
+        let y = (row.map(\.minY).min() ?? 0) - OrgLayout.drop
+
+        path.move(to: parentBottom)
+        path.addLine(to: CGPoint(x: parentBottom.x, y: y))
+
+        if row.count == 1 {
+            if abs(left.midX - parentBottom.x) > 0.5 {
+                path.move(to: CGPoint(x: parentBottom.x, y: y))
+                path.addLine(to: CGPoint(x: left.midX, y: y))
+            }
+        } else {
+            path.move(to: CGPoint(x: left.midX, y: y))
+            path.addLine(to: CGPoint(x: right.midX, y: y))
+        }
+
+        for kid in row {
+            path.move(to: CGPoint(x: kid.midX, y: y))
+            path.addLine(to: CGPoint(x: kid.midX, y: kid.minY))
+        }
+    }
+
+    /// Center stem → split left/right. Buses live in the gutter; stubs into cards.
+    /// No line runs through a middle staff card.
+    private func drawSplitSides(path: inout Path, parentBottom: CGPoint, kids: [CGRect]) {
+        let left = kids.filter { $0.midX <= parentBottom.x }.sorted { $0.minY < $1.minY }
+        let right = kids.filter { $0.midX > parentBottom.x }.sorted { $0.minY < $1.minY }
+        guard !left.isEmpty || !right.isEmpty else { return }
+
+        let topY = (kids.map(\.minY).min() ?? 0) - OrgLayout.drop
+
+        // Stem down the center.
+        path.move(to: parentBottom)
+        path.addLine(to: CGPoint(x: parentBottom.x, y: topY))
+
+        // Buses sit in the center gutter (outside card boxes).
+        let leftBusX: CGFloat = {
+            guard !left.isEmpty else { return parentBottom.x }
+            return (left.map(\.maxX).max() ?? parentBottom.x) + OrgLayout.stub
+        }()
+        let rightBusX: CGFloat = {
+            guard !right.isEmpty else { return parentBottom.x }
+            return (right.map(\.minX).min() ?? parentBottom.x) - OrgLayout.stub
+        }()
+
+        // Short center bar: left bus ← center → right bus (only through gutter).
+        if !left.isEmpty {
+            path.move(to: CGPoint(x: parentBottom.x, y: topY))
+            path.addLine(to: CGPoint(x: leftBusX, y: topY))
+        }
+        if !right.isEmpty {
+            path.move(to: CGPoint(x: parentBottom.x, y: topY))
+            path.addLine(to: CGPoint(x: rightBusX, y: topY))
+        }
+
+        drawSideBus(path: &path, busX: leftBusX, cards: left, topY: topY)
+        drawSideBus(path: &path, busX: rightBusX, cards: right, topY: topY)
+    }
+
+    private func drawSideBus(
+        path: inout Path,
+        busX: CGFloat,
+        cards: [CGRect],
+        topY: CGFloat
+    ) {
+        guard let first = cards.first, let last = cards.last else { return }
+
+        // Vertical bus in the gutter (never through a card).
+        path.move(to: CGPoint(x: busX, y: topY))
+        path.addLine(to: CGPoint(x: busX, y: last.midY))
+
+        // First card: drop from bar onto card top.
+        path.move(to: CGPoint(x: busX, y: topY))
+        path.addLine(to: CGPoint(x: first.midX, y: topY))
+        path.addLine(to: CGPoint(x: first.midX, y: first.minY))
+
+        // Remaining cards: horizontal stubs from gutter bus into card center.
+        for card in cards.dropFirst() {
+            path.move(to: CGPoint(x: busX, y: card.midY))
+            path.addLine(to: CGPoint(x: card.midX, y: card.midY))
+        }
     }
 }
