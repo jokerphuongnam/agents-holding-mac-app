@@ -4,7 +4,7 @@ import SwiftUI
 /// Staffs org graph — top is senior, below are reports.
 /// Connectors **stop at card edges** (never run through a card body).
 /// Large leaf teams: left/right stacks + center gutter spine.
-/// Zoom: **⌘ + scroll wheel** zooms graph content only; ScrollView chrome stays fixed.
+/// Zoom: **⌘ + scroll** resizes layout (not `scaleEffect`) so text/lines stay sharp.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
@@ -12,7 +12,6 @@ struct StaffsTreeView: View {
     private let viewportMaxHeight: CGFloat = 560
 
     @StateObject private var zoomState = OrgGraphZoomState()
-    @State private var contentSize: CGSize = .zero
 
     /// Prefer classic CEO roots when centering the viewport.
     private var focusRootId: String? {
@@ -21,6 +20,10 @@ struct StaffsTreeView: View {
             return OrgScrollAnchor.card(ceo)
         }
         return roots.first.map { OrgScrollAnchor.card($0.staff.id) }
+    }
+
+    private var layout: OrgLayout {
+        OrgLayout(zoom: zoomState.zoom)
     }
 
     var body: some View {
@@ -45,24 +48,8 @@ struct StaffsTreeView: View {
                 ScrollViewReader { proxy in
                     ScrollView([.horizontal, .vertical], showsIndicators: true) {
                         graphContent
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: OrgContentSizeKey.self,
-                                        value: geo.size
-                                    )
-                                }
-                            )
-                            .scaleEffect(zoomState.zoom, anchor: .topLeading)
-                            // Important: do NOT force height while contentSize is still .zero —
-                            // that used to clamp the graph to 1pt and make the tree "disappear".
-                            .frame(
-                                width: zoomedWidth,
-                                height: zoomedHeight,
-                                alignment: .topLeading
-                            )
                     }
-                    // Viewport stays fixed; only `graphContent` scales inside.
+                    // Viewport stays fixed; content grows/shrinks with layout zoom.
                     .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight, alignment: .topLeading)
                     .clipped()
                     .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
@@ -79,29 +66,13 @@ struct StaffsTreeView: View {
                     .onChange(of: focusRootId) { _, _ in
                         scrollCEOToCenter(proxy)
                     }
-                    .onChange(of: contentSize) { _, newSize in
-                        if newSize.width > 1, newSize.height > 1 {
-                            scrollCEOToCenter(proxy)
-                        }
-                    }
-                    .onPreferenceChange(OrgContentSizeKey.self) { newSize in
-                        // Ignore degenerate measures from a collapsed proposal.
-                        guard newSize.width > 1, newSize.height > 1 else { return }
-                        contentSize = newSize
+                    .onChange(of: zoomState.zoom) { _, _ in
+                        scrollCEOToCenter(proxy)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Layout size after zoom. `nil` height/width until measured so first layout is intrinsic.
-    private var zoomedWidth: CGFloat? {
-        contentSize.width > 1 ? contentSize.width * zoomState.zoom : nil
-    }
-
-    private var zoomedHeight: CGFloat? {
-        contentSize.height > 1 ? contentSize.height * zoomState.zoom : nil
     }
 
     private var zoomToolbar: some View {
@@ -141,14 +112,17 @@ struct StaffsTreeView: View {
     }
 
     private var graphContent: some View {
-        VStack(alignment: .center, spacing: 28) {
+        let layout = self.layout
+        return VStack(alignment: .center, spacing: layout.rootSpacing) {
             ForEach(roots) { root in
-                OrgNodeView(node: root, depth: 0, onSelect: onSelect)
+                OrgNodeView(node: root, depth: 0, layout: layout, onSelect: onSelect)
             }
         }
-        .padding(16)
-        .frame(minWidth: 320, alignment: .top)
+        .padding(layout.padding)
+        .frame(minWidth: 320 * layout.zoom, alignment: .top)
         .coordinateSpace(name: OrgChartSpace.name)
+        // Stable identity so zoom rebuilds crisp vector text instead of scaling a bitmap.
+        .id("org-zoom-\(String(format: "%.2f", layout.zoom))")
     }
 
     private var pinchZoomGesture: some Gesture {
@@ -167,8 +141,8 @@ struct StaffsTreeView: View {
         DispatchQueue.main.async {
             proxy.scrollTo(id, anchor: .center)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.easeOut(duration: 0.3)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeOut(duration: 0.25)) {
                 proxy.scrollTo(id, anchor: .center)
             }
         }
@@ -182,8 +156,8 @@ private final class OrgGraphZoomState: ObservableObject {
     private var pinchBase: CGFloat = 1.0
     private var scrollMonitor: Any?
 
-    private let zoomMin: CGFloat = 0.4
-    private let zoomMax: CGFloat = 2.5
+    private let zoomMin: CGFloat = 0.5
+    private let zoomMax: CGFloat = 2.0
 
     var canZoomIn: Bool { zoom < zoomMax - 0.001 }
     var canZoomOut: Bool { zoom > zoomMin + 0.001 }
@@ -202,7 +176,8 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     func applyPinch(_ magnification: CGFloat) {
-        zoom = min(max(pinchBase * magnification, zoomMin), zoomMax)
+        // Keep pinchBase until gesture ends so magnification stays relative.
+        zoom = Self.snap(pinchBase * magnification, min: zoomMin, max: zoomMax)
     }
 
     func endPinch() {
@@ -210,9 +185,15 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     private func setZoom(_ value: CGFloat) {
-        let next = min(max(value, zoomMin), zoomMax)
-        zoom = next
-        pinchBase = next
+        // Snap to 5% steps so layout/fonts stay on clean sizes (sharper glyphs).
+        let snapped = Self.snap(value, min: zoomMin, max: zoomMax)
+        zoom = snapped
+        pinchBase = snapped
+    }
+
+    private static func snap(_ value: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
+        let clamped = Swift.min(Swift.max(value, min), max)
+        return (clamped * 20).rounded() / 20
     }
 
     /// ⌘ + scroll zooms graph content. (⌃+scroll is macOS screen zoom — do not use.)
@@ -220,21 +201,20 @@ private final class OrgGraphZoomState: ObservableObject {
         removeCommandScrollMonitor()
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, self.isHovered else { return event }
-            // Require ⌘; ignore if ⌃ is also held (avoid fighting system zoom).
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             guard flags.contains(.command), !flags.contains(.control) else {
                 return event
             }
             let delta = event.scrollingDeltaY
             let step = event.hasPreciseScrollingDeltas ? delta * 0.004 : delta * 0.06
-            let next = min(max(self.zoom + step, self.zoomMin), self.zoomMax)
-            if abs(next - self.zoom) > 0.0001 {
-                DispatchQueue.main.async {
-                    self.zoom = next
-                    self.pinchBase = next
-                }
+            let next = self.zoom + step
+            let before = self.zoom
+            DispatchQueue.main.async {
+                self.setZoom(next)
             }
-            return nil
+            // Consume only when zoom would change.
+            let snapped = (min(max(next, self.zoomMin), self.zoomMax) * 20).rounded() / 20
+            return abs(snapped - before) > 0.0001 ? nil : event
         }
     }
 
@@ -254,33 +234,33 @@ private enum OrgScrollAnchor {
     static func card(_ staffId: String) -> String { "org-card-\(staffId)" }
 }
 
-private struct OrgContentSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        let next = nextValue()
-        // Keep the larger measurement — nested GeometryReaders can report tiny sizes.
-        if next.width * next.height > value.width * value.height {
-            value = next
-        }
-    }
-}
+// MARK: - Layout (zoom multiplies real sizes — no bitmap scale)
 
-// MARK: - Layout
+private struct OrgLayout: Equatable {
+    var zoom: CGFloat
 
-private enum OrgLayout {
-    static let cardWidth: CGFloat = 140
-    static let siblingGap: CGFloat = 24
-    /// Wide gutter so the center spine cannot sit on a card.
-    static let centerGutter: CGFloat = 48
-    static let stackGap: CGFloat = 14
-    static let splitThreshold: Int = 4
-    static let stem: CGFloat = 18
-    static let drop: CGFloat = 14
-    static let lineWidth: CGFloat = 2
+    var cardWidth: CGFloat { 140 * zoom }
+    var siblingGap: CGFloat { 24 * zoom }
+    var centerGutter: CGFloat { 48 * zoom }
+    var stackGap: CGFloat { 14 * zoom }
+    var stem: CGFloat { 18 * zoom }
+    var drop: CGFloat { 14 * zoom }
+    var lineWidth: CGFloat { max(1, 2 * zoom) }
+    var edgePad: CGFloat { max(1, 1 * zoom) }
+    var padding: CGFloat { 16 * zoom }
+    var rootSpacing: CGFloat { 28 * zoom }
+    var cardPadding: CGFloat { 8 * zoom }
+    var cardCorner: CGFloat { 10 * zoom }
+    var nameIconGap: CGFloat { 4 * zoom }
+    var cardStackSpacing: CGFloat { 3 * zoom }
+    var connectorReserve: CGFloat { stem + drop }
+
+    static let splitThreshold = 4
     static let lineColor = Color.secondary.opacity(0.6)
-    /// Keep strokes slightly outside the rounded rect.
-    static let edgePad: CGFloat = 1
-    static var connectorReserve: CGFloat { stem + drop }
+
+    var nameFont: Font { .system(size: 13 * zoom, weight: .semibold) }
+    var metaFont: Font { .system(size: 10 * zoom) }
+    var iconFont: Font { .system(size: 11 * zoom) }
 }
 
 private enum OrgChartSpace {
@@ -304,6 +284,7 @@ private struct CardFrameKey: PreferenceKey {
 private struct OrgNodeView: View {
     let node: StaffTreeNode
     let depth: Int
+    let layout: OrgLayout
     let onSelect: (StaffNode) -> Void
 
     private var fanStyle: OrgFanStyle {
@@ -328,7 +309,7 @@ private struct OrgNodeView: View {
 
             if !node.children.isEmpty {
                 Color.clear
-                    .frame(height: OrgLayout.connectorReserve)
+                    .frame(height: layout.connectorReserve)
                 childrenLayout(node.children, style: fanStyle)
             }
         }
@@ -340,7 +321,8 @@ private struct OrgNodeView: View {
                     style: fanStyle,
                     directChildIds: node.children.map(\.staff.id),
                     frames: frames,
-                    origin: origin
+                    origin: origin,
+                    layout: layout
                 )
             }
         }
@@ -359,25 +341,25 @@ private struct OrgNodeView: View {
     private func childrenLayout(_ children: [StaffTreeNode], style: OrgFanStyle) -> some View {
         switch style {
         case .fan:
-            HStack(alignment: .top, spacing: OrgLayout.siblingGap) {
+            HStack(alignment: .top, spacing: layout.siblingGap) {
                 ForEach(children) { child in
-                    OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                    OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect)
                 }
             }
         case .splitSides(let leftIds, let rightIds):
             let byId = Dictionary(uniqueKeysWithValues: children.map { ($0.staff.id, $0) })
-            HStack(alignment: .top, spacing: OrgLayout.centerGutter) {
-                VStack(spacing: OrgLayout.stackGap) {
+            HStack(alignment: .top, spacing: layout.centerGutter) {
+                VStack(spacing: layout.stackGap) {
                     ForEach(leftIds, id: \.self) { id in
                         if let child = byId[id] {
-                            OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                            OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect)
                         }
                     }
                 }
-                VStack(spacing: OrgLayout.stackGap) {
+                VStack(spacing: layout.stackGap) {
                     ForEach(rightIds, id: \.self) { id in
                         if let child = byId[id] {
-                            OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                            OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect)
                         }
                     }
                 }
@@ -389,39 +371,39 @@ private struct OrgNodeView: View {
         Button {
             onSelect(staff)
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: layout.cardStackSpacing) {
+                HStack(spacing: layout.nameIconGap) {
                     Image(systemName: cardIcon(staff, emphasized: emphasized))
-                        .font(.caption)
+                        .font(layout.iconFont)
                     Text(staff.name)
-                        .font(.subheadline.weight(.semibold))
+                        .font(layout.nameFont)
                         .lineLimit(1)
                 }
                 Text(staff.team)
-                    .font(.caption2)
+                    .font(layout.metaFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 if !staff.blurb.isEmpty {
                     Text(staff.blurb)
-                        .font(.caption2)
+                        .font(layout.metaFont)
                         .foregroundStyle(.tertiary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
             }
-            .padding(8)
-            .frame(width: OrgLayout.cardWidth, alignment: .leading)
+            .padding(layout.cardPadding)
+            .frame(width: layout.cardWidth, alignment: .leading)
             .background(
                 emphasized
                     ? Color.accentColor.opacity(0.18)
                     : Color.primary.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 10)
+                in: RoundedRectangle(cornerRadius: layout.cardCorner)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: layout.cardCorner)
                     .strokeBorder(
                         emphasized ? Color.accentColor.opacity(0.55) : Color.secondary.opacity(0.22),
-                        lineWidth: 1
+                        lineWidth: max(1, layout.zoom)
                     )
             )
         }
@@ -446,6 +428,7 @@ private struct OrgConnectorCanvas: View {
     let directChildIds: [String]
     let frames: [String: CGRect]
     let origin: CGPoint
+    let layout: OrgLayout
 
     var body: some View {
         Canvas { context, _ in
@@ -461,9 +444,8 @@ private struct OrgConnectorCanvas: View {
             }
 
             let parent = local(parentGlobal)
-            let parentBottom = CGPoint(x: parent.midX, y: parent.maxY + OrgLayout.edgePad)
+            let parentBottom = CGPoint(x: parent.midX, y: parent.maxY + layout.edgePad)
 
-            // Direct children only — never route using grandchild frames.
             let direct: [(id: String, rect: CGRect)] = directChildIds.compactMap { id in
                 frames[id].map { (id, local($0)) }
             }
@@ -485,7 +467,7 @@ private struct OrgConnectorCanvas: View {
                 path,
                 with: .color(OrgLayout.lineColor),
                 style: StrokeStyle(
-                    lineWidth: OrgLayout.lineWidth,
+                    lineWidth: layout.lineWidth,
                     lineCap: .square,
                     lineJoin: .miter
                 )
@@ -494,11 +476,10 @@ private struct OrgConnectorCanvas: View {
         .allowsHitTesting(false)
     }
 
-    /// T above a row — drops stop at the **top edge** of each card.
     private func drawFan(path: inout Path, parentBottom: CGPoint, kids: [CGRect]) {
         let row = kids.sorted { $0.midX < $1.midX }
         guard let left = row.first, let right = row.last else { return }
-        let y = (row.map(\.minY).min() ?? 0) - OrgLayout.drop
+        let y = (row.map(\.minY).min() ?? 0) - layout.drop
 
         path.move(to: parentBottom)
         path.addLine(to: CGPoint(x: parentBottom.x, y: y))
@@ -514,13 +495,12 @@ private struct OrgConnectorCanvas: View {
         }
 
         for kid in row {
-            let top = kid.minY - OrgLayout.edgePad
+            let top = kid.minY - layout.edgePad
             path.move(to: CGPoint(x: kid.midX, y: y))
             path.addLine(to: CGPoint(x: kid.midX, y: top))
         }
     }
 
-    /// Center spine in the gutter; stubs end on each card’s **near edge** only.
     private func drawSplitSides(
         path: inout Path,
         parentBottom: CGPoint,
@@ -529,9 +509,7 @@ private struct OrgConnectorCanvas: View {
     ) {
         guard !left.isEmpty || !right.isEmpty else { return }
 
-        let topY = ((left + right).map(\.minY).min() ?? 0) - OrgLayout.drop
-
-        // Gutter bounds from column boxes — spine stays strictly between them.
+        let topY = ((left + right).map(\.minY).min() ?? 0) - layout.drop
         let leftEdge = left.map(\.maxX).max() ?? parentBottom.x
         let rightEdge = right.map(\.minX).min() ?? parentBottom.x
         let spineX: CGFloat = {
@@ -543,29 +521,25 @@ private struct OrgConnectorCanvas: View {
 
         let lowestMidY = (left + right).map(\.midY).max() ?? topY
 
-        // Stem → spine head (may jog into gutter center).
         path.move(to: parentBottom)
         path.addLine(to: CGPoint(x: parentBottom.x, y: topY))
         if abs(parentBottom.x - spineX) > 0.5 {
             path.addLine(to: CGPoint(x: spineX, y: topY))
         }
 
-        // Vertical spine only in the gutter.
         path.move(to: CGPoint(x: spineX, y: topY))
         path.addLine(to: CGPoint(x: spineX, y: lowestMidY))
 
-        // Left stack: stubs stop at card.maxX (never enter interior).
         for card in left {
             let y = card.midY
-            let edgeX = card.maxX + OrgLayout.edgePad
+            let edgeX = card.maxX + layout.edgePad
             path.move(to: CGPoint(x: spineX, y: y))
             path.addLine(to: CGPoint(x: edgeX, y: y))
         }
 
-        // Right stack: stubs stop at card.minX.
         for card in right {
             let y = card.midY
-            let edgeX = card.minX - OrgLayout.edgePad
+            let edgeX = card.minX - layout.edgePad
             path.move(to: CGPoint(x: spineX, y: y))
             path.addLine(to: CGPoint(x: edgeX, y: y))
         }
