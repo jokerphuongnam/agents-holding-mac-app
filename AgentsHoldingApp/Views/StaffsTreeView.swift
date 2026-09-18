@@ -54,16 +54,18 @@ struct StaffsTreeView: View {
                                 }
                             )
                             .scaleEffect(zoomState.zoom, anchor: .topLeading)
+                            // Important: do NOT force height while contentSize is still .zero —
+                            // that used to clamp the graph to 1pt and make the tree "disappear".
                             .frame(
-                                width: max(contentSize.width * zoomState.zoom, 320 * zoomState.zoom),
-                                height: max(contentSize.height * zoomState.zoom, 1),
+                                width: zoomedWidth,
+                                height: zoomedHeight,
                                 alignment: .topLeading
                             )
                     }
                     .frame(maxWidth: .infinity, maxHeight: viewportMaxHeight, alignment: .topLeading)
                     .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                     .onHover { zoomState.isHovered = $0 }
-                    .gesture(pinchZoomGesture)
+                    .simultaneousGesture(pinchZoomGesture)
                     .onAppear {
                         zoomState.installControlScrollMonitor()
                         scrollCEOToCenter(proxy)
@@ -74,11 +76,29 @@ struct StaffsTreeView: View {
                     .onChange(of: focusRootId) { _, _ in
                         scrollCEOToCenter(proxy)
                     }
-                    .onPreferenceChange(OrgContentSizeKey.self) { contentSize = $0 }
+                    .onChange(of: contentSize) { _, newSize in
+                        if newSize.width > 1, newSize.height > 1 {
+                            scrollCEOToCenter(proxy)
+                        }
+                    }
+                    .onPreferenceChange(OrgContentSizeKey.self) { newSize in
+                        // Ignore degenerate measures from a collapsed proposal.
+                        guard newSize.width > 1, newSize.height > 1 else { return }
+                        contentSize = newSize
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Layout size after zoom. `nil` height/width until measured so first layout is intrinsic.
+    private var zoomedWidth: CGFloat? {
+        contentSize.width > 1 ? contentSize.width * zoomState.zoom : nil
+    }
+
+    private var zoomedHeight: CGFloat? {
+        contentSize.height > 1 ? contentSize.height * zoomState.zoom : nil
     }
 
     private var zoomToolbar: some View {
@@ -230,7 +250,11 @@ private enum OrgScrollAnchor {
 private struct OrgContentSizeKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
+        let next = nextValue()
+        // Keep the larger measurement — nested GeometryReaders can report tiny sizes.
+        if next.width * next.height > value.width * value.height {
+            value = next
+        }
     }
 }
 
