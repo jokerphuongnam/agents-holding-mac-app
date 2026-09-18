@@ -30,7 +30,7 @@ struct RootView: View {
         case .codeFile:
             CodeFileDetailView()
         case .usage:
-            UsagePlaceholderView()
+            UsageView()
         }
     }
 }

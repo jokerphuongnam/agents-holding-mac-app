@@ -86,6 +86,22 @@
 
 /* Usage */
 "usage_placeholder" = "Thống kê token theo staff / model / worktree / ngày·tháng — plan P4. Merge gán theo model đã resolve.";
+"usage_help" = "Tổng từ lúc có ledger, hôm nay, và từng ngày — cột grok / claude / codex.";
+"usage_scope" = "Phạm vi";
+"usage_scope_holding" = "Holding";
+"usage_scope_company" = "Company đang mở";
+"usage_all_time" = "Toàn thời gian";
+"usage_today" = "Hôm nay";
+"usage_events" = "Events";
+"usage_table_summary" = "Tóm tắt";
+"usage_table_by_day" = "Theo ngày";
+"usage_col_period" = "Kỳ";
+"usage_col_total" = "Tổng";
+"usage_no_rows" = "Không có dòng";
+"usage_empty_title" = "Chưa có usage ledger";
+"usage_empty_body" = "Ghi events vào cache/usage/events.jsonl của holding hoặc company. Chưa có thì bảng trống.";
+"usage_schema_help" = "Schema kỳ vọng (JSONL, mỗi dòng một event):";
+"usage_ledger_paths" = "File ledger đã đọc:";
 
 /* Settings */
 "holding_path" = "Đường dẫn holding";

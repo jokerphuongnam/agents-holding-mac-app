@@ -86,6 +86,22 @@
 
 /* Usage */
 "usage_placeholder" = "Token stats by staff / model / worktree / day·month — plan P4. Merge traffic attributes to the resolved model.";
+"usage_help" = "Totals since company/holding ledger began, today, and each day — with grok / claude / codex columns.";
+"usage_scope" = "Scope";
+"usage_scope_holding" = "Holding";
+"usage_scope_company" = "Open company";
+"usage_all_time" = "All time";
+"usage_today" = "Today";
+"usage_events" = "Events";
+"usage_table_summary" = "Summary";
+"usage_table_by_day" = "By day";
+"usage_col_period" = "Period";
+"usage_col_total" = "Total";
+"usage_no_rows" = "No rows";
+"usage_empty_title" = "No usage ledger yet";
+"usage_empty_body" = "Write events to cache/usage/events.jsonl under the holding or company. Until then this table stays empty.";
+"usage_schema_help" = "Expected schema (JSONL, one event per line):";
+"usage_ledger_paths" = "Ledger files loaded:";
 
 /* Settings */
 "holding_path" = "Holding path";
