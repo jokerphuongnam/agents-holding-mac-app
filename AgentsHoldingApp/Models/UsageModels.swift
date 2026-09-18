@@ -101,16 +101,15 @@ enum UsageChartKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// "" = all models
-typealias UsageModelFilter = String
-
 struct UsageQuery: Equatable {
-    var worktree: String? // nil/"" = all → split rows by worktree
-    var model: String? // nil/"" = all → add model columns
+    /// nil/"" = all worktrees (aggregate). Non-empty = filter to that worktree.
+    var worktree: String?
+    /// Models to include as rows (and in Sum). Empty = no model rows.
+    var selectedModels: [String]
     var rangeStart: Date
     var rangeEnd: Date
     var bucket: UsageBucket
-    /// Discovered from system/harness/*.toml — drives columns & filters.
+    /// Harness ids discovered for this scope (catalog order).
     var availableModels: [String]
 }
 

@@ -1,6 +1,10 @@
 import Foundation
 
 /// Reads usage ledgers and builds **one** dynamic table from active filters.
+///
+/// Table shape:
+/// - Rows: Sum (first) + one row per selected model
+/// - Columns: Model | Total | Range start | …buckets… | Range end
 struct UsageLedgerService {
     private let dayFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -8,6 +12,16 @@ struct UsageLedgerService {
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = .current
         f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private let rangeLabelFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = .current
+        f.timeZone = .current
+        f.dateStyle = .medium
+        f.timeStyle = .none
         return f
     }()
 
@@ -74,21 +88,29 @@ struct UsageLedgerService {
         if let wt = query.worktree, !wt.isEmpty {
             filtered = filtered.filter { ($0.worktree ?? "") == wt }
         }
-        if let model = query.model, !model.isEmpty {
-            filtered = filtered.filter { $0.model == model }
+
+        let selected = query.selectedModels
+        let selectedSet = Set(selected)
+        if !selectedSet.isEmpty {
+            filtered = filtered.filter { selectedSet.contains($0.model) }
+        } else {
+            filtered = []
         }
 
-        let splitWorktree = query.worktree == nil || query.worktree?.isEmpty == true
-        let splitModelColumns = query.model == nil || query.model?.isEmpty == true
-        let modelColumns = known.isEmpty ? Array(Set(filtered.map(\.model))).sorted() : known
+        // Models present under current worktree+range (before model tick filter) for UI checklist.
+        var scopeFiltered = normalized.filter { $0.timestamp >= start && $0.timestamp < endExclusive }
+        if let wt = query.worktree, !wt.isEmpty {
+            scopeFiltered = scopeFiltered.filter { ($0.worktree ?? "") == wt }
+        }
+        let modelsInScope = Array(Set(scopeFiltered.map(\.model))).sorted()
 
         let table = buildTable(
             events: filtered,
+            selectedModels: selected,
             bucket: query.bucket,
-            splitWorktree: splitWorktree,
-            splitModelColumns: splitModelColumns,
-            singleModel: query.model,
-            modelColumns: modelColumns,
+            rangeStart: start,
+            rangeEndInclusive: cal.startOfDay(for: query.rangeEnd),
+            endExclusive: endExclusive,
             calendar: cal
         )
 
@@ -105,7 +127,7 @@ struct UsageLedgerService {
             eventCount: allEvents.count,
             filteredCount: filtered.count,
             availableWorktrees: worktrees,
-            availableModels: modelColumns,
+            availableModels: modelsInScope.isEmpty ? known : modelsInScope,
             dataStart: dataStart,
             dataEnd: dataEnd,
             table: table,
@@ -116,93 +138,107 @@ struct UsageLedgerService {
         )
     }
 
-    // MARK: - Dynamic table
+    // MARK: - Dynamic table (Sum + models × time buckets)
 
     private func buildTable(
         events: [UsageEvent],
+        selectedModels: [String],
         bucket: UsageBucket,
-        splitWorktree: Bool,
-        splitModelColumns: Bool,
-        singleModel: String?,
-        modelColumns: [String],
+        rangeStart: Date,
+        rangeEndInclusive: Date,
+        endExclusive: Date,
         calendar: Calendar
     ) -> UsageDynamicTable {
+        let periods = periodKeys(
+            from: rangeStart,
+            to: endExclusive,
+            bucket: bucket,
+            calendar: calendar
+        )
+        let startLabel = rangeLabelFormatter.string(from: rangeStart)
+        let endLabel = rangeLabelFormatter.string(from: rangeEndInclusive)
+
         var columns: [UsageTableColumn] = [
-            UsageTableColumn(key: "period", title: "period"),
+            UsageTableColumn(key: "label", title: "model"),
+            UsageTableColumn(key: "total", title: "total"),
+            UsageTableColumn(key: "range_start", title: "range_start"),
         ]
-        if splitWorktree {
-            columns.append(UsageTableColumn(key: "worktree", title: "worktree"))
+        for p in periods {
+            columns.append(UsageTableColumn(key: "p:\(p)", title: p))
         }
-        columns.append(UsageTableColumn(key: "total", title: "total"))
-        if splitModelColumns {
-            for m in modelColumns {
-                columns.append(UsageTableColumn(key: m, title: m))
-            }
-        } else if let m = singleModel, !m.isEmpty {
-            columns.append(UsageTableColumn(key: m, title: m))
-        }
+        columns.append(UsageTableColumn(key: "range_end", title: "range_end"))
 
-        // Group key → events
-        var groups: [String: [UsageEvent]] = [:]
+        // Aggregate: model → period → tokens
+        var byModelPeriod: [String: [String: Int]] = [:]
+        var byModelTotal: [String: Int] = [:]
+        var sumByPeriod: [String: Int] = [:]
+        var sumTotal = 0
+
         for e in events {
-            let period = bucketKey(for: e.timestamp, bucket: bucket, calendar: calendar)
-            let wt = splitWorktree ? ((e.worktree?.isEmpty == false) ? (e.worktree ?? "") : "(none)") : ""
-            let key = splitWorktree ? "\(period)|\(wt)" : period
-            groups[key, default: []].append(e)
+            let p = bucketKey(for: e.timestamp, bucket: bucket, calendar: calendar)
+            byModelPeriod[e.model, default: [:]][p, default: 0] += e.totalTokens
+            byModelTotal[e.model, default: 0] += e.totalTokens
+            sumByPeriod[p, default: 0] += e.totalTokens
+            sumTotal += e.totalTokens
         }
 
-        var rows: [UsageTableRow] = []
-        for key in groups.keys.sorted(by: >) {
-            let evs = groups[key] ?? []
-            let period: String
-            let worktree: String
-            if splitWorktree, let bar = key.firstIndex(of: "|") {
-                period = String(key[..<bar])
-                worktree = String(key[key.index(after: bar)...])
-            } else {
-                period = key
-                worktree = ""
-            }
-
-            var byModel: [String: Int] = [:]
-            var total = 0
-            for e in evs {
-                total += e.totalTokens
-                byModel[e.model, default: 0] += e.totalTokens
-            }
-
+        func makeRow(id: String, label: String, total: Int, periodMap: [String: Int]) -> UsageTableRow {
             var cells: [String: String] = [
-                "period": period,
+                "label": label,
                 "total": "\(total)",
+                "range_start": startLabel,
+                "range_end": endLabel,
             ]
             var numeric: [String: Int] = ["total": total]
-            if splitWorktree {
-                cells["worktree"] = worktree
+            for p in periods {
+                let key = "p:\(p)"
+                let n = periodMap[p] ?? 0
+                cells[key] = "\(n)"
+                numeric[key] = n
             }
-            if splitModelColumns {
-                for m in modelColumns {
-                    let n = byModel[m] ?? 0
-                    cells[m] = "\(n)"
-                    numeric[m] = n
-                }
-            } else if let m = singleModel, !m.isEmpty {
-                let n = byModel[m] ?? total
-                cells[m] = "\(n)"
-                numeric[m] = n
-            }
+            return UsageTableRow(id: id, cells: cells, sortKey: id, numeric: numeric)
+        }
 
+        var rows: [UsageTableRow] = [
+            makeRow(id: "sum", label: "Sum", total: sumTotal, periodMap: sumByPeriod),
+        ]
+        for model in selectedModels {
             rows.append(
-                UsageTableRow(
-                    id: key,
-                    cells: cells,
-                    sortKey: key,
-                    numeric: numeric
+                makeRow(
+                    id: "m:\(model)",
+                    label: model,
+                    total: byModelTotal[model] ?? 0,
+                    periodMap: byModelPeriod[model] ?? [:]
                 )
             )
         }
 
-        rows.sort { $0.sortKey > $1.sortKey }
         return UsageDynamicTable(columns: columns, rows: rows)
+    }
+
+    /// Every bucket key from range start through end (inclusive of last day).
+    private func periodKeys(
+        from start: Date,
+        to endExclusive: Date,
+        bucket: UsageBucket,
+        calendar: Calendar
+    ) -> [String] {
+        var keys: [String] = []
+        var seen = Set<String>()
+        var cursor = start
+        // Cap walks so a huge range cannot freeze the UI.
+        var steps = 0
+        let maxSteps = 3700
+        while cursor < endExclusive, steps < maxSteps {
+            let key = bucketKey(for: cursor, bucket: bucket, calendar: calendar)
+            if seen.insert(key).inserted {
+                keys.append(key)
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+            steps += 1
+        }
+        return keys
     }
 
     private func buildChartBuckets(

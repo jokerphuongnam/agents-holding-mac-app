@@ -4,8 +4,9 @@ import SwiftUI
 struct UsageView: View {
     @EnvironmentObject private var appModel: AppModel
 
-    @State private var worktreeSelection: String = "" // "" = all → adds worktree column/rows
-    @State private var modelSelection: String = "" // "" = all → adds model columns
+    @State private var worktreeSelection: String = "" // "" = all worktrees (sum)
+    /// Ticked models shown as rows (Sum always first). Empty until first load.
+    @State private var selectedModels: Set<String> = []
     @State private var rangeStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var rangeEnd: Date = Date()
     @State private var bucket: UsageBucket = .day
@@ -18,7 +19,8 @@ struct UsageView: View {
     @State private var chartProgress: CGFloat = 0
 
     private let ledger = UsageLedgerService()
-    @State private var availableModels: [String] = []
+    /// Harness catalog (stable order); checklist uses models present in scope.
+    @State private var harnessModels: [String] = []
     private let chartAnimation = Animation.easeOut(duration: 0.85)
 
     var body: some View {
@@ -50,13 +52,24 @@ struct UsageView: View {
         .onAppear { reloadRaw() }
         .onChange(of: appModel.usageScope) { _, _ in reloadRaw() }
         .onChange(of: appModel.openCompany?.node.id) { _, _ in reloadRaw() }
-        .onChange(of: worktreeSelection) { _, _ in reaggregate() }
-        .onChange(of: modelSelection) { _, _ in reaggregate() }
-        .onChange(of: rangeStart) { _, _ in reaggregate() }
-        .onChange(of: rangeEnd) { _, _ in reaggregate() }
+        .onChange(of: worktreeSelection) { _, _ in
+            syncModelSelectionToScope(selectAllPresent: true)
+            reaggregate()
+            ensureChartKindFits()
+        }
+        .onChange(of: selectedModels) { _, _ in
+            reaggregate()
+            ensureChartKindFits()
+        }
+        .onChange(of: rangeStart) { _, _ in
+            syncModelSelectionToScope(selectAllPresent: false)
+            reaggregate()
+        }
+        .onChange(of: rangeEnd) { _, _ in
+            syncModelSelectionToScope(selectAllPresent: false)
+            reaggregate()
+        }
         .onChange(of: bucket) { _, _ in reaggregate() }
-        .onChange(of: modelSelection) { _, _ in ensureChartKindFits() }
-        .onChange(of: worktreeSelection) { _, _ in ensureChartKindFits() }
         .onChange(of: chartKind) { _, _ in replayChartAnimation() }
     }
 
@@ -129,7 +142,7 @@ struct UsageView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 480)
 
-            // Worktree — All adds worktree column/rows; one value filters
+            // Worktree — All = sum across worktrees; one value filters models to that worktree
             Picker(L10n.usageWorktree, selection: $worktreeSelection) {
                 Text(L10n.usageWorktreeAll).tag("")
                 ForEach(report?.availableWorktrees ?? distinctWorktrees(), id: \.self) { wt in
@@ -138,14 +151,35 @@ struct UsageView: View {
             }
             .frame(maxWidth: 420)
 
-            // Model — discovered from system/harness/*.toml (not hardcoded).
-            Picker(L10n.usageColModel, selection: $modelSelection) {
-                Text(L10n.usageModelAll).tag("")
-                ForEach(availableModels, id: \.self) { model in
-                    Text(model).tag(model)
+            // Models — multi-tick; rows = Sum + ticked models
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(L10n.usageColModel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(L10n.usageModelSelectAll) {
+                        selectedModels = Set(modelsInCurrentScope)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(modelsInCurrentScope.isEmpty)
+                    Button(L10n.usageModelClear) {
+                        selectedModels = []
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(selectedModels.isEmpty)
+                }
+                if modelsInCurrentScope.isEmpty {
+                    Text(L10n.usageModelNoneInScope)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    FlowModelTicks(
+                        models: modelsInCurrentScope,
+                        selected: $selectedModels
+                    )
                 }
             }
-            .frame(maxWidth: 480)
 
             HStack {
                 Button(L10n.usagePreset7d) { applyPreset(days: 7) }
@@ -164,17 +198,18 @@ struct UsageView: View {
         .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
     }
 
+    /// Models that appear under current worktree + date range (before tick filter).
+    private var modelsInCurrentScope: [String] {
+        if let report, !report.availableModels.isEmpty {
+            return report.availableModels
+        }
+        return modelsPresentInRawScope()
+    }
+
     private var tableShapeHint: String {
-        var parts: [String] = [L10n.usageHintRowsPeriod]
-        if worktreeSelection.isEmpty {
-            parts.append(L10n.usageHintRowsWorktree)
-        }
-        if modelSelection.isEmpty {
-            parts.append(L10n.usageHintColsModels)
-        } else {
-            parts.append(L10n.usageHintColsOneModel(modelSelection))
-        }
-        return parts.joined(separator: " · ")
+        let wt = worktreeSelection.isEmpty ? L10n.usageWorktreeAll : worktreeSelection
+        let n = selectedModels.count
+        return L10n.usageHintTableShape(wt, n)
     }
 
     private func summaryCards(_ report: UsageReport) -> some View {
@@ -202,8 +237,8 @@ struct UsageView: View {
 
     private var availableChartKinds: [UsageChartKind] {
         var kinds: [UsageChartKind] = [.bar, .line, .table]
-        // Round/fan charts need a categorical share breakdown
-        if modelSelection.isEmpty || worktreeSelection.isEmpty {
+        // Donut/pie when more than one model is ticked (share breakdown).
+        if selectedModels.count > 1 {
             kinds.insert(.donut, at: 0)
             kinds.insert(.pie, at: 1)
         }
@@ -286,29 +321,12 @@ struct UsageView: View {
         }
     }
 
-    /// Donut/pie from active share dimension (models if All models; else worktrees if All worktrees).
+    /// Donut/pie = share across ticked models.
     private func shareChart(_ report: UsageReport, innerRatio: CGFloat) -> some View {
-        let slices: [UsageModelBreakdown] = {
-            if modelSelection.isEmpty {
-                let models = report.availableModels.isEmpty ? Array(report.rangeByModel.keys).sorted() : report.availableModels
-                return models.map {
-                    UsageModelBreakdown(model: $0, tokens: report.rangeByModel[$0] ?? 0)
-                }
-            }
-            // Single model + all worktrees → share by worktree using table rows
-            if worktreeSelection.isEmpty {
-                return report.table.rows.map {
-                    UsageModelBreakdown(
-                        model: $0.cells["worktree"] ?? $0.id,
-                        tokens: $0.numeric["total"] ?? 0
-                    )
-                }
-            }
-            return [
-                UsageModelBreakdown(model: modelSelection, tokens: report.rangeTotal),
-            ]
-        }()
-
+        let models = orderedSelectedModels()
+        let slices = models.map {
+            UsageModelBreakdown(model: $0, tokens: report.rangeByModel[$0] ?? 0)
+        }
         let filtered = slices.filter { $0.tokens > 0 }
         return Chart(filtered) { slice in
             SectorMark(
@@ -319,19 +337,12 @@ struct UsageView: View {
             .foregroundStyle(by: .value(L10n.usageColModel, slice.model))
             .cornerRadius(innerRatio == 0 ? 0 : 3)
         }
-        .applyModelColorScale(isModelShare: modelSelection.isEmpty)
+        .applyModelColorScale(isModelShare: true)
         .frame(height: 240)
     }
 
     private func timelinePoints(_ report: UsageReport) -> [UsageChartPoint] {
-        let models: [String]
-        if !modelSelection.isEmpty {
-            models = [modelSelection]
-        } else if !report.availableModels.isEmpty {
-            models = report.availableModels
-        } else {
-            models = Array(Set(report.chartBuckets.flatMap(\.byModel.keys))).sorted()
-        }
+        let models = orderedSelectedModels()
         return report.chartBuckets.flatMap { bucket in
             models.map { model in
                 UsageChartPoint(
@@ -341,6 +352,14 @@ struct UsageView: View {
                 )
             }
         }
+    }
+
+    private func orderedSelectedModels() -> [String] {
+        let scope = modelsInCurrentScope
+        let picked = selectedModels
+        let ordered = scope.filter { picked.contains($0) }
+        if !ordered.isEmpty { return ordered }
+        return Array(picked).sorted()
     }
 
     private func timelineBarChart(_ report: UsageReport) -> some View {
@@ -414,15 +433,10 @@ struct UsageView: View {
                         ForEach(table.rows) { row in
                             GridRow {
                                 ForEach(table.columns) { col in
-                                    let raw = row.cells[col.key] ?? "—"
-                                    if col.key == "period" || col.key == "worktree" {
-                                        Text(raw)
-                                    } else {
-                                        Text((Int(raw) ?? 0).formatted()).monospacedDigit()
-                                    }
+                                    cellView(row: row, column: col)
                                 }
                             }
-                            .font(.callout)
+                            .font(row.id == "sum" ? .callout.weight(.semibold) : .callout)
                         }
                     }
                     .padding(12)
@@ -432,12 +446,31 @@ struct UsageView: View {
         }
     }
 
+    @ViewBuilder
+    private func cellView(row: UsageTableRow, column: UsageTableColumn) -> some View {
+        let raw = row.cells[column.key] ?? "—"
+        switch column.key {
+        case "label":
+            Text(row.id == "sum" ? L10n.usageRowSum : raw)
+        case "range_start", "range_end":
+            Text(raw)
+                .foregroundStyle(.secondary)
+        default:
+            Text((Int(raw) ?? 0).formatted()).monospacedDigit()
+        }
+    }
+
     private func columnTitle(_ col: UsageTableColumn) -> String {
         switch col.key {
-        case "period": return L10n.usageColPeriod
-        case "worktree": return L10n.usageWorktree
+        case "label": return L10n.usageColModel
         case "total": return L10n.usageColTotal
-        default: return col.title
+        case "range_start": return L10n.usageColRangeStart
+        case "range_end": return L10n.usageColRangeEnd
+        default:
+            if col.key.hasPrefix("p:") {
+                return String(col.key.dropFirst(2))
+            }
+            return col.title
         }
     }
 
@@ -489,13 +522,10 @@ struct UsageView: View {
             case .companySubtree, .staff(_, false): return nil
             }
         }()
-        availableModels = HarnessCatalog.vendorHarnesses(
+        harnessModels = HarnessCatalog.vendorHarnesses(
             holdingRoot: includeHoldingLedger,
             companies: companies
         )
-        if !modelSelection.isEmpty, !availableModels.contains(modelSelection) {
-            modelSelection = ""
-        }
         let loaded = ledger.loadRawEvents(
             holdingRoot: includeHoldingLedger,
             companies: companies,
@@ -507,6 +537,7 @@ struct UsageView: View {
         if !worktreeSelection.isEmpty, !wts.contains(worktreeSelection) {
             worktreeSelection = ""
         }
+        syncModelSelectionToScope(selectAllPresent: selectedModels.isEmpty)
         reaggregate()
     }
 
@@ -521,13 +552,14 @@ struct UsageView: View {
         var start = rangeStart
         var end = rangeEnd
         if start > end { swap(&start, &end) }
+        let ordered = orderedSelectedModels()
         let query = UsageQuery(
             worktree: worktreeSelection.isEmpty ? nil : worktreeSelection,
-            model: modelSelection.isEmpty ? nil : modelSelection,
+            selectedModels: ordered,
             rangeStart: start,
             rangeEnd: end,
             bucket: bucket,
-            availableModels: availableModels
+            availableModels: harnessModels
         )
         report = ledger.report(
             events: rawEvents,
@@ -536,6 +568,40 @@ struct UsageView: View {
             query: query
         )
         replayChartAnimation()
+    }
+
+    /// Models present for current worktree + date range from raw events.
+    private func modelsPresentInRawScope() -> [String] {
+        let cal = Calendar.current
+        var start = rangeStart
+        var end = rangeEnd
+        if start > end { swap(&start, &end) }
+        let dayStart = cal.startOfDay(for: start)
+        let endExclusive = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: end)) ?? end
+        let known = harnessModels
+        var models = Set<String>()
+        for var e in rawEvents {
+            e.rebucket(knownHarnesses: known)
+            guard e.timestamp >= dayStart, e.timestamp < endExclusive else { continue }
+            if !worktreeSelection.isEmpty, (e.worktree ?? "") != worktreeSelection { continue }
+            models.insert(e.model)
+        }
+        // Prefer harness order, then leftovers.
+        let ordered = known.filter { models.contains($0) }
+        let rest = models.subtracting(known).sorted()
+        return ordered + rest
+    }
+
+    /// When worktree changes → select all present. When range changes → keep ticks that still exist.
+    private func syncModelSelectionToScope(selectAllPresent: Bool) {
+        let present = modelsPresentInRawScope()
+        let presentSet = Set(present)
+        if selectAllPresent || selectedModels.isEmpty {
+            selectedModels = presentSet
+        } else {
+            let kept = selectedModels.intersection(presentSet)
+            selectedModels = kept.isEmpty ? presentSet : kept
+        }
     }
 
     private func applyPreset(days: Int) {
@@ -553,6 +619,34 @@ struct UsageView: View {
 
     private func distinctWorktrees() -> [String] {
         Array(Set(rawEvents.compactMap(\.worktree).filter { !$0.isEmpty })).sorted()
+    }
+}
+
+/// Checkbox chips for multi-select models.
+private struct FlowModelTicks: View {
+    let models: [String]
+    @Binding var selected: Set<String>
+
+    var body: some View {
+        // Simple wrapping via LazyVGrid — stable for a handful of harness ids.
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 110), spacing: 8)],
+            alignment: .leading,
+            spacing: 6
+        ) {
+            ForEach(models, id: \.self) { model in
+                Toggle(isOn: Binding(
+                    get: { selected.contains(model) },
+                    set: { on in
+                        if on { selected.insert(model) } else { selected.remove(model) }
+                    }
+                )) {
+                    Text(model)
+                        .font(.callout)
+                }
+                .toggleStyle(.checkbox)
+            }
+        }
     }
 }
 
