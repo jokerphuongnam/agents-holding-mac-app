@@ -21,13 +21,14 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 
 ```bash
 cd ~/Documents/Agents/agents-holding-app
-./Scripts/generate.sh          # SwiftGen + XcodeGen
+./Scripts/generate.sh          # SwiftGen + XcodeGen → AgentsHoldingApp.xcodeproj
 open AgentsHoldingApp.xcodeproj
-# Xcode → File → Packages → Resolve Package Versions (if needed)
+# Xcode resolves SPM on first open (MarkdownUI, HighlightSwift)
 ```
 
-Xcode **Run** also runs `Scripts/generate.sh` (SwiftGen only) as a pre-build phase.
-Generated files live in `AgentsHoldingApp/Generated/` (gitignored).
+`AgentsHoldingApp.xcodeproj/` and `AgentsHoldingApp/Generated/` are **gitignored** — always regenerate via `./Scripts/generate.sh`.
+
+Xcode **Run** also runs `Scripts/generate.sh` with `SKIP_XCODEGEN=1` (SwiftGen only) as a pre-build phase.
 
 Holding path resolution (first match wins):
 
