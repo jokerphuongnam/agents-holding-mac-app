@@ -57,6 +57,19 @@ struct StaffDirectory {
 
         let skillIDs = row?.skillIDs ?? []
         let skills = skillIDs.map { id in resolveSkill(id: id, companyRoot: companyRoot) }
+        let assets = CompanyAssetsDiscovery()
+        let skillFiles = assets.loadStaffSkills(
+            staffName: name,
+            team: team,
+            companyRoot: companyRoot,
+            skillIDs: skillIDs
+        )
+        let scriptFiles = assets.loadStaffScripts(
+            staffName: name,
+            team: team,
+            companyRoot: companyRoot,
+            skillFiles: skillFiles
+        )
 
         let (allowed, denied) = parsePathLimits(
             staffBody: body,
@@ -72,6 +85,8 @@ struct StaffDirectory {
             lead: lead,
             reports: reports,
             skills: skills,
+            skillFiles: skillFiles,
+            scriptFiles: scriptFiles,
             allowedPaths: allowed,
             deniedHints: denied,
             bodyMarkdown: stripFrontmatter(body),

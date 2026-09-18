@@ -13,25 +13,28 @@ struct CompanyCanvasView: View {
 
                         childrenSection(snap)
                         teamsSection(snap)
-                        FileListSection(
-                            title: "Skills (files)",
-                            systemImage: "book",
-                            files: snap.skills,
-                            emptyText: "No SKILL.md under system/skills"
-                        ) { file in
-                            appModel.openSkill(
-                                SkillRef(
-                                    skillID: file.path.deletingLastPathComponent().lastPathComponent,
-                                    title: file.fileName,
-                                    path: file.path
+                        // Only company-scoped assets here; role skills/scripts live on staff detail.
+                        if !snap.skills.isEmpty {
+                            FileListSection(
+                                title: "Company skills",
+                                systemImage: "book",
+                                files: snap.skills,
+                                emptyText: ""
+                            ) { file in
+                                appModel.openSkill(
+                                    SkillRef(
+                                        skillID: file.path.deletingLastPathComponent().lastPathComponent,
+                                        title: file.fileName,
+                                        path: file.path
+                                    )
                                 )
-                            )
+                            }
                         }
                         FileListSection(
-                            title: "Scripts (files)",
+                            title: "Company scripts (install)",
                             systemImage: "terminal",
                             files: snap.scripts,
-                            emptyText: "No scripts under system/"
+                            emptyText: "No company-wide install scripts"
                         ) { file in
                             appModel.openCodeFile(file)
                         }

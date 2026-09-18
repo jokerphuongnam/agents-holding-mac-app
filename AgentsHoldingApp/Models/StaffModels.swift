@@ -58,6 +58,10 @@ struct StaffDetail: Hashable {
     var lead: String?
     var reports: [StaffNode]
     var skills: [SkillRef]
+    /// File rows for this staff's SKILL.md (same set as skills, for file-list UI).
+    var skillFiles: [CodeFileRef]
+    /// Scripts owned / used by this staff (under their skill dirs; ceo + hop scripts).
+    var scriptFiles: [CodeFileRef]
     var allowedPaths: [String]
     var deniedHints: [String]
     var bodyMarkdown: String

@@ -1,3 +1,4 @@
+import MarkdownUI
 import SwiftUI
 
 struct StaffDetailView: View {
@@ -11,10 +12,32 @@ struct StaffDetailView: View {
                         header(detail)
                         orgSection(detail)
                         scopeSection(detail)
-                        skillsSection(detail)
+                        FileListSection(
+                            title: "Skills (files)",
+                            systemImage: "book",
+                            files: detail.skillFiles,
+                            emptyText: "No skills for this staff"
+                        ) { file in
+                            appModel.openSkill(
+                                SkillRef(
+                                    skillID: file.path.deletingLastPathComponent().lastPathComponent,
+                                    title: file.fileName,
+                                    path: file.path
+                                )
+                            )
+                        }
+                        FileListSection(
+                            title: "Scripts (files)",
+                            systemImage: "terminal",
+                            files: detail.scriptFiles,
+                            emptyText: "No scripts for this staff"
+                        ) { file in
+                            appModel.openCodeFile(file)
+                        }
                         bodySection(detail)
                     }
                     .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .navigationTitle(detail.node.name)
             } else {
@@ -51,6 +74,7 @@ struct StaffDetailView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func badge(_ text: String) -> some View {
@@ -88,7 +112,6 @@ struct StaffDetailView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .help("Mở detail cấp trên")
                 } else {
                     Text("— (top dispatcher)")
                         .foregroundStyle(.tertiary)
@@ -125,12 +148,6 @@ struct StaffDetailView: View {
                                         Text(report.team)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
-                                        if !report.blurb.isEmpty {
-                                            Text(report.blurb)
-                                                .font(.caption2)
-                                                .foregroundStyle(.tertiary)
-                                                .lineLimit(2)
-                                        }
                                     }
                                     Spacer()
                                     Image(systemName: "chevron.right")
@@ -141,7 +158,6 @@ struct StaffDetailView: View {
                                 .padding(.horizontal, 8)
                             }
                             .buttonStyle(.plain)
-                            .help("Mở detail \(report.name)")
                             if report.id != detail.reports.last?.id {
                                 Divider()
                             }
@@ -166,7 +182,7 @@ struct StaffDetailView: View {
                 .foregroundStyle(.secondary)
 
             if detail.allowedPaths.isEmpty && detail.deniedHints.isEmpty {
-                Text("Chưa parse được path fence từ staff md / SCOPE.md — xem body bên dưới.")
+                Text("Chưa parse được path fence từ staff md / SCOPE.md — xem brief bên dưới.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -198,78 +214,15 @@ struct StaffDetailView: View {
         .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    @ViewBuilder
-    private func skillsSection(_ detail: StaffDetail) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Skills (files)", systemImage: "doc.text")
-                .font(.headline)
-            Text("List SKILL.md — bấm file để mở dạng Markdown. Mỗi skill = biên nhiệm vụ (vd. devops → CLI).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if detail.skills.isEmpty {
-                Text("Không có skill id trên agents.tsv — staff có thể chỉ dựa path fence / brief.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(detail.skills) { skill in
-                        Button {
-                            appModel.openSkill(skill)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: skill.path == nil ? "questionmark.folder" : "doc.richtext")
-                                    .foregroundStyle(skill.path == nil ? .orange : .accentColor)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(skill.fileLabel)
-                                        .font(.system(.body, design: .monospaced))
-                                        .fontWeight(.medium)
-                                    if skill.title != skill.skillID {
-                                        Text(skill.title)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    if let path = skill.path {
-                                        Text(path.path)
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    } else {
-                                        Text("SKILL.md not found under system/skills")
-                                            .font(.caption2)
-                                            .foregroundStyle(.orange)
-                                    }
-                                }
-                                Spacer()
-                                if skill.path != nil {
-                                    Image(systemName: "chevron.right")
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 8)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(skill.path == nil)
-                        if skill.id != detail.skills.last?.id {
-                            Divider()
-                        }
-                    }
-                }
-                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-            }
-        }
-    }
-
     private func bodySection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Staff brief", systemImage: "doc.plaintext")
+            Label("Staff brief", systemImage: "doc.richtext")
                 .font(.headline)
-            Text(detail.bodyMarkdown)
-                .font(.body)
+            Markdown(detail.bodyMarkdown)
+                .markdownTheme(.gitHub)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

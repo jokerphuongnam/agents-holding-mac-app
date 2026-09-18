@@ -18,8 +18,8 @@ struct CompanyDiscovery {
 
         let children = loadChildren(parentCompanyPath: companyPath, holdingRoot: holdingRoot)
         let teams = staffDirectory.loadTeams(companyRoot: companyPath)
-        let skills = assets.loadSkills(companyRoot: companyPath)
-        let scripts = assets.loadScripts(companyRoot: companyPath)
+        let skills = assets.loadCompanyWideSkills(companyRoot: companyPath)
+        let scripts = assets.loadCompanyWideScripts(companyRoot: companyPath)
 
         var enriched = node
         if enriched.companyPath == nil {
