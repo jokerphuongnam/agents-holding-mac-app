@@ -16,7 +16,7 @@ struct StaffDetailView: View {
                             title: "Skills (files)",
                             systemImage: "book",
                             files: detail.skillFiles,
-                            emptyText: "No skills for this staff"
+                            emptyText: "No skills under system/skills/customs/\(detail.node.team)/\(detail.node.name)/"
                         ) { file in
                             appModel.openSkill(
                                 SkillRef(
@@ -30,7 +30,7 @@ struct StaffDetailView: View {
                             title: "Scripts (files)",
                             systemImage: "terminal",
                             files: detail.scriptFiles,
-                            emptyText: "No scripts for this staff"
+                            emptyText: "No scripts under this staff’s skill folders"
                         ) { file in
                             appModel.openCodeFile(file)
                         }
