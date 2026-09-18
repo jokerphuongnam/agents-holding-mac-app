@@ -20,7 +20,7 @@ enum HoldingDiscoveryError: LocalizedError {
 /// Inventory = `holding/system/install/company_registry.py` →
 /// local `holding/cache/companies.sqlite` (same as Python staff tools).
 struct HoldingDiscovery {
-    /// Prefer env, then UserDefaults, then sibling `../agents-holding` next to this repo.
+    /// Prefer checkout SoT under Documents/Agents, not `~/.agents` (separate sqlite!).
     func resolveHoldingPath() throws -> URL {
         if let env = ProcessInfo.processInfo.environment["AGENTS_HOLDING_PATH"], !env.isEmpty {
             let url = URL(fileURLWithPath: (env as NSString).expandingTildeInPath)
@@ -28,6 +28,23 @@ struct HoldingDiscovery {
                 throw HoldingDiscoveryError.pathNotFound(env)
             }
             return url.standardizedFileURL
+        }
+
+        // Canonical checkout (same folder as this app’s sibling repo).
+        let documentsCheckout = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Documents/Agents/agents-holding")
+        if FileManager.default.fileExists(atPath: documentsCheckout.path) {
+            // If Settings still points at ~/.agents, ignore it — that DB is a different inventory.
+            if let saved = UserDefaults.standard.string(forKey: "holdingPath"), !saved.isEmpty {
+                let savedURL = URL(fileURLWithPath: (saved as NSString).expandingTildeInPath).standardizedFileURL
+                if savedURL.path.contains("/.agents"), documentsCheckout.path != savedURL.path {
+                    UserDefaults.standard.set(documentsCheckout.path, forKey: "holdingPath")
+                } else if FileManager.default.fileExists(atPath: savedURL.path),
+                          !savedURL.path.contains("/.agents") {
+                    return savedURL
+                }
+            }
+            return documentsCheckout.standardizedFileURL
         }
 
         if let saved = UserDefaults.standard.string(forKey: "holdingPath"), !saved.isEmpty {
@@ -48,20 +65,14 @@ struct HoldingDiscovery {
             return sibling.standardizedFileURL
         }
 
-        // Installed copy
+        // Last resort: installed copy under ~/.agents (separate companies.sqlite!)
         let homeAgents = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".agents/holding")
         if FileManager.default.fileExists(atPath: homeAgents.appendingPathComponent("system/staffs").path) {
-            return homeAgents.deletingLastPathComponent() // ~/.agents (holding package inside)
+            return homeAgents.deletingLastPathComponent()
         }
 
-        let homeFallback = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Documents/Agents/agents-holding")
-        if FileManager.default.fileExists(atPath: homeFallback.path) {
-            return homeFallback.standardizedFileURL
-        }
-
-        throw HoldingDiscoveryError.pathNotFound("sibling agents-holding")
+        throw HoldingDiscoveryError.pathNotFound("Documents/Agents/agents-holding")
     }
 
     func loadSnapshot(at holdingRoot: URL) throws -> HoldingSnapshot {
