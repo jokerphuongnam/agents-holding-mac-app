@@ -23,11 +23,17 @@ struct AddCompanySheet: View {
     @State private var roster: [StaffDraft] = []
     @State private var editingStaffName: String?
 
-    @State private var showAddFromTemplate = false
-    @State private var showAddNewStaff = false
+    @State private var showAddStaff = false
+    @State private var addStaffTab: AddStaffTab = .existing
     @State private var newStaffName = ""
     @State private var newStaffTeam = "custom"
     @State private var newStaffDescription = ""
+
+    private enum AddStaffTab: String, CaseIterable, Identifiable {
+        case existing = "Có sẵn"
+        case custom = "Custom staff"
+        var id: String { rawValue }
+    }
 
     @State private var isWorking = false
     @State private var log = ""
@@ -62,11 +68,8 @@ struct AddCompanySheet: View {
                 )
             }
         }
-        .sheet(isPresented: $showAddFromTemplate) {
-            addFromTemplateSheet
-        }
-        .sheet(isPresented: $showAddNewStaff) {
-            addNewStaffSheet
+        .sheet(isPresented: $showAddStaff) {
+            addStaffSheet
         }
         .onAppear {
             loadCatalog()
@@ -147,17 +150,13 @@ struct AddCompanySheet: View {
 
             HStack {
                 Button {
-                    showAddFromTemplate = true
-                } label: {
-                    Label("Add from template", systemImage: "plus.rectangle.on.folder")
-                }
-                Button {
+                    addStaffTab = .existing
                     newStaffName = ""
                     newStaffTeam = "custom"
                     newStaffDescription = ""
-                    showAddNewStaff = true
+                    showAddStaff = true
                 } label: {
-                    Label("Add new staff", systemImage: "person.badge.plus")
+                    Label("Add staff", systemImage: "person.badge.plus")
                 }
                 Spacer()
                 Button("Recommended set") { applyRecommended() }
@@ -256,88 +255,93 @@ struct AddCompanySheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var addFromTemplateSheet: some View {
+    private var addStaffSheet: some View {
         let existing = Set(roster.map(\.name))
         let available = templateCatalog.filter { !existing.contains($0.name) }
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Add staff from template")
+            Text("Add staff")
                 .font(.headline)
-            Text("Chỉ catalog holding — không invent.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if available.isEmpty {
-                Text("Mọi template staff đã có trong roster.")
+            Picker("", selection: $addStaffTab) {
+                ForEach(AddStaffTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if addStaffTab == .existing {
+                Text("Chọn staff có sẵn trong template — không cần description (đã có từ catalog). Có thể gắn skills/access sau khi thêm.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
-                List(available) { staff in
-                    Button {
-                        roster.append(.fromTemplate(staff))
-                        roster.sort { $0.name < $1.name }
-                        showAddFromTemplate = false
-                        editingStaffName = staff.name
-                    } label: {
-                        VStack(alignment: .leading) {
-                            Text(staff.name).fontWeight(.semibold)
-                            Text("\(staff.team) · \(staff.blurb)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if available.isEmpty {
+                    Text("Mọi template staff đã có trong roster.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    List(available) { staff in
+                        Button {
+                            roster.append(.fromTemplate(staff))
+                            roster.sort { $0.name < $1.name }
+                            showAddStaff = false
+                            editingStaffName = staff.name
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(staff.name).fontWeight(.semibold)
+                                Text("\(staff.team) · \(staff.blurb)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
                 }
+            } else {
+                Text("Custom staff — bắt buộc description. Skills/access gắn riêng staff này ở bước editor.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                TextField("name (slug)", text: $newStaffName)
+                TextField("team", text: $newStaffTeam)
+                Text("Description")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $newStaffDescription)
+                    .frame(minHeight: 100)
+                    .border(Color.secondary.opacity(0.2))
             }
-            HStack {
-                Spacer()
-                Button("Close") { showAddFromTemplate = false }
-            }
-        }
-        .padding(20)
-        .frame(width: 480, height: 420)
-    }
 
-    private var addNewStaffSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Add new staff")
-                .font(.headline)
-            Text("Bắt buộc description. Sau đó mở editor để gắn skills library + access paths cho đúng staff này.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("name (slug)", text: $newStaffName)
-            TextField("team", text: $newStaffTeam)
-            TextEditor(text: $newStaffDescription)
-                .frame(minHeight: 100)
-                .border(Color.secondary.opacity(0.2))
             HStack {
                 Spacer()
-                Button("Cancel") { showAddNewStaff = false }
-                Button("Add") {
-                    let n = newStaffName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    guard !n.isEmpty, !roster.contains(where: { $0.name == n }) else { return }
-                    let draft = StaffDraft(
-                        name: n,
-                        team: newStaffTeam.trimmingCharacters(in: .whitespaces).isEmpty ? "custom" : newStaffTeam,
-                        blurb: newStaffDescription,
-                        isTemplate: false,
-                        isNew: true,
-                        description: newStaffDescription,
-                        selectedSkillIDs: [],
-                        allowPaths: [],
-                        tier: "medium",
-                        lead: "ceo"
+                Button("Close") { showAddStaff = false }
+                if addStaffTab == .custom {
+                    Button("Add custom") {
+                        let n = newStaffName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                        guard !n.isEmpty, !roster.contains(where: { $0.name == n }) else { return }
+                        let draft = StaffDraft(
+                            name: n,
+                            team: newStaffTeam.trimmingCharacters(in: .whitespaces).isEmpty ? "custom" : newStaffTeam,
+                            blurb: newStaffDescription,
+                            isTemplate: false,
+                            isNew: true,
+                            description: newStaffDescription,
+                            selectedSkillIDs: [],
+                            allowPaths: [],
+                            tier: "medium",
+                            lead: "ceo"
+                        )
+                        roster.append(draft)
+                        roster.sort { $0.name < $1.name }
+                        showAddStaff = false
+                        editingStaffName = n
+                    }
+                    .disabled(
+                        newStaffName.trimmingCharacters(in: .whitespaces).isEmpty
+                            || newStaffDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
-                    roster.append(draft)
-                    roster.sort { $0.name < $1.name }
-                    showAddNewStaff = false
-                    editingStaffName = n
                 }
-                .disabled(
-                    newStaffName.trimmingCharacters(in: .whitespaces).isEmpty
-                        || newStaffDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
             }
         }
         .padding(20)
-        .frame(width: 480, height: 360)
+        .frame(width: 520, height: 460)
     }
 
     private var footer: some View {
@@ -531,13 +535,29 @@ struct StaffEditorSheet: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Group {
-                        Text("Description").font(.headline)
-                        TextEditor(text: $draft.description)
-                            .frame(minHeight: 80)
-                            .border(Color.secondary.opacity(0.2))
+                    if draft.isNew {
+                        Group {
+                            Text("Description").font(.headline)
+                            Text("Bắt buộc với custom staff.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $draft.description)
+                                .frame(minHeight: 80)
+                                .border(Color.secondary.opacity(0.2))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Group {
+                            Text("Description").font(.headline)
+                            Text(draft.blurb.isEmpty ? "—" : draft.blurb)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text("Staff template — description lấy từ catalog (không bắt buộc nhập lại).")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Group {
                         Text("Access (files/folders)").font(.headline)
