@@ -1,9 +1,8 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
-/// Local SPM package whose only job is to pull SwiftGen into the repo’s
-/// `.build` / checkouts so `Scripts/generate.sh` can `swift run` it —
-/// no Homebrew / global install required.
+/// Pulls build CLIs into the repo via SPM so `Scripts/generate.sh` needs only
+/// a Swift toolchain — no Homebrew (`swiftgen` / `xcodegen`).
 let package = Package(
     name: "BuildTools",
     platforms: [
@@ -11,9 +10,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/SwiftGen/SwiftGen.git", from: "6.6.3"),
+        .package(url: "https://github.com/yonaskolb/XcodeGen.git", from: "2.44.0"),
     ],
     targets: [
-        // Empty target so the package resolves & builds dependency graph.
         .target(
             name: "BuildTools",
             path: "Sources/BuildTools"
