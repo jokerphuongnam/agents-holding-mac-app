@@ -55,6 +55,8 @@
 "staffs_tree_empty" = "Không có staff để hiện cây tổ chức";
 "staffs_tree_help" = "Trên là cấp trên, dưới là cấp dưới. Giữ đường nối A–B (không mũi tên). Control+lăn chuột để zoom; cuộn để pan. Team đông: chia 2 bên + đường giữa.";
 "staffs_tree_zoom_reset" = "Reset zoom";
+"staffs_tree_zoom_in" = "Phóng to";
+"staffs_tree_zoom_out" = "Thu nhỏ";
 "company_scripts" = "Scripts company (install)";
 "company_scripts_empty" = "Không có script install cấp company";
 "company_skills" = "Skills company";

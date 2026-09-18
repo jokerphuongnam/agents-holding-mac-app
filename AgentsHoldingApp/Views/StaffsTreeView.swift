@@ -30,14 +30,7 @@ struct StaffsTreeView: View {
                     .font(.headline)
                 Spacer()
                 if !roots.isEmpty {
-                    Text("\(Int((zoomState.zoom * 100).rounded()))%")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    Button(L10n.staffsTreeZoomReset) {
-                        withAnimation(.easeOut(duration: 0.2)) { zoomState.reset() }
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(abs(zoomState.zoom - 1) < 0.01)
+                    zoomToolbar
                 }
             }
             Text(L10n.staffsTreeHelp)
@@ -88,6 +81,42 @@ struct StaffsTreeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var zoomToolbar: some View {
+        HStack(spacing: 6) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { zoomState.zoomOut() }
+            } label: {
+                Image(systemName: "minus.magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.staffsTreeZoomOut)
+            .disabled(!zoomState.canZoomOut)
+            .accessibilityLabel(L10n.staffsTreeZoomOut)
+
+            Text("\(Int((zoomState.zoom * 100).rounded()))%")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 36, alignment: .center)
+
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { zoomState.zoomIn() }
+            } label: {
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.staffsTreeZoomIn)
+            .disabled(!zoomState.canZoomIn)
+            .accessibilityLabel(L10n.staffsTreeZoomIn)
+
+            Button(L10n.staffsTreeZoomReset) {
+                withAnimation(.easeOut(duration: 0.2)) { zoomState.reset() }
+            }
+            .buttonStyle(.borderless)
+            .disabled(abs(zoomState.zoom - 1) < 0.01)
+        }
+        .controlSize(.small)
+    }
+
     private var graphContent: some View {
         VStack(alignment: .center, spacing: 28) {
             ForEach(roots) { root in
@@ -133,9 +162,20 @@ private final class OrgGraphZoomState: ObservableObject {
     private let zoomMin: CGFloat = 0.4
     private let zoomMax: CGFloat = 2.5
 
+    var canZoomIn: Bool { zoom < zoomMax - 0.001 }
+    var canZoomOut: Bool { zoom > zoomMin + 0.001 }
+
     func reset() {
         zoom = 1.0
         pinchBase = 1.0
+    }
+
+    func zoomIn() {
+        setZoom(zoom + 0.1)
+    }
+
+    func zoomOut() {
+        setZoom(zoom - 0.1)
     }
 
     func applyPinch(_ magnification: CGFloat) {
@@ -144,6 +184,12 @@ private final class OrgGraphZoomState: ObservableObject {
 
     func endPinch() {
         pinchBase = zoom
+    }
+
+    private func setZoom(_ value: CGFloat) {
+        let next = min(max(value, zoomMin), zoomMax)
+        zoom = next
+        pinchBase = next
     }
 
     func installControlScrollMonitor() {

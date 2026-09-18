@@ -55,6 +55,8 @@
 "staffs_tree_empty" = "No staffs to show in the org tree";
 "staffs_tree_help" = "Top is senior, below are reports. Lines link A–B (no arrowheads). Control+scroll to zoom; scroll to pan. Large teams split left/right around a center spine.";
 "staffs_tree_zoom_reset" = "Reset zoom";
+"staffs_tree_zoom_in" = "Zoom in";
+"staffs_tree_zoom_out" = "Zoom out";
 "company_scripts" = "Company scripts (install)";
 "company_scripts_empty" = "No company-wide install scripts";
 "company_skills" = "Company skills";
