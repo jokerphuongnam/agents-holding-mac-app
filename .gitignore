@@ -24,6 +24,10 @@ build/
 .swiftpm/
 Packages/
 
+# SwiftGen / codegen
+AgentsHoldingApp/Generated/
+**/Generated/
+
 # Secrets
 *.pem
 .env
