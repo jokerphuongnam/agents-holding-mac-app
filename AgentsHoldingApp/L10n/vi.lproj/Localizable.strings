@@ -86,7 +86,7 @@
 
 /* Usage */
 "usage_placeholder" = "Thống kê token theo staff / model / worktree / ngày·tháng — plan P4. Merge gán theo model đã resolve.";
-"usage_help" = "Lọc khoảng ngày, worktree, và bucket (ngày/tuần/tháng/năm). Bảng tách grok / claude / codex.";
+"usage_help" = "Một bảng theo filter: bucket thời gian, worktree, model. Cột/hàng đổi đúng theo lựa chọn.";
 "usage_scope" = "Phạm vi";
 "usage_scope_holding" = "Holding";
 "usage_scope_company" = "Company đang mở";
@@ -131,6 +131,13 @@
 "usage_table_by_worktree" = "Theo worktree (khoảng đã chọn)";
 "usage_table_by_worktree_help" = "Hiện khi Worktree = Tất cả — so sánh worktree trong khoảng.";
 "usage_table_by_bucket_help" = "Khớp filter Bucket — mỗi dòng một ngày/tuần/tháng/năm.";
+"usage_table" = "Bảng";
+"usage_table_help" = "Chỉ một bảng — cấu trúc theo filter phía trên.";
+"usage_model_all" = "Mọi model";
+"usage_hint_rows_period" = "hàng: kỳ thời gian";
+"usage_hint_rows_worktree" = "hàng tách thêm theo worktree";
+"usage_hint_cols_models" = "cột: total + grok/claude/codex";
+"usage_hint_cols_one_model" = "cột: total + %@";
 "usage_staff_button_help" = "Mở analytics cho staff này";
 "usage_company_button_help" = "Mở analytics cho company này và các company con";
 "usage_holding_button_help" = "Mở analytics cho mọi company trong holding";

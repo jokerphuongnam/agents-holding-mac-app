@@ -6,7 +6,6 @@ struct UsageEvent: Hashable, Codable {
     var company: String?
     var staff: String?
     var worktree: String?
-    /// Vendor bucket: grok | claude | codex | merge | other
     var model: String
     var launchMode: String?
     var inputTokens: Int
@@ -93,34 +92,45 @@ struct UsageEvent: Hashable, Codable {
 }
 
 enum UsageBucket: String, CaseIterable, Identifiable {
-    case day
-    case week
-    case month
-    case year
-
+    case day, week, month, year
     var id: String { rawValue }
 }
 
+/// "" = all models
+typealias UsageModelFilter = String
+
 struct UsageQuery: Equatable {
-    var scopeCompany: Bool
-    /// nil = all worktrees
-    var worktree: String?
+    var worktree: String? // nil/"" = all → split rows by worktree
+    var model: String? // nil/"" = all → add model columns
     var rangeStart: Date
     var rangeEnd: Date
     var bucket: UsageBucket
 }
 
-struct UsageModelBreakdown: Hashable, Identifiable {
-    var id: String { model }
-    var model: String
-    var tokens: Int
+struct UsageTableColumn: Hashable, Identifiable {
+    var id: String { key }
+    var key: String
+    var title: String
 }
 
-struct UsagePeriodRow: Hashable, Identifiable {
-    var id: String { label }
-    var label: String
+struct UsageTableRow: Hashable, Identifiable {
+    var id: String
+    /// Display cells keyed by column.key (period, worktree, total, grok, …)
+    var cells: [String: String]
+    var sortKey: String
+    var numeric: [String: Int]
+}
+
+struct UsageDynamicTable: Hashable {
+    var columns: [UsageTableColumn]
+    var rows: [UsageTableRow]
+}
+
+struct UsageChartBucket: Hashable, Identifiable {
+    var id: String { period }
+    var period: String
+    var byModel: [String: Int]
     var total: Int
-    var byModel: [UsageModelBreakdown]
 }
 
 struct UsageReport: Hashable {
@@ -128,13 +138,13 @@ struct UsageReport: Hashable {
     var eventCount: Int
     var filteredCount: Int
     var availableWorktrees: [String]
-    /// Min/max timestamps in loaded ledgers (for default range).
     var dataStart: Date?
     var dataEnd: Date?
-    var rangeTotal: UsagePeriodRow
-    var buckets: [UsagePeriodRow]
-    /// Present when filter is "all worktrees" — one row per worktree in range.
-    var byWorktree: [UsagePeriodRow]
+    var table: UsageDynamicTable
+    /// For charts (same filtered events, bucketed by time only).
+    var chartBuckets: [UsageChartBucket]
+    var rangeByModel: [String: Int]
+    var rangeTotal: Int
     var ledgerPaths: [URL]
 }
 

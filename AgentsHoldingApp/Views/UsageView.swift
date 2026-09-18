@@ -4,7 +4,8 @@ import SwiftUI
 struct UsageView: View {
     @EnvironmentObject private var appModel: AppModel
 
-    @State private var worktreeSelection: String = "" // "" = all
+    @State private var worktreeSelection: String = "" // "" = all → adds worktree column/rows
+    @State private var modelSelection: String = "" // "" = all → adds model columns
     @State private var rangeStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var rangeEnd: Date = Date()
     @State private var bucket: UsageBucket = .day
@@ -23,14 +24,8 @@ struct UsageView: View {
                 filters
                 if let report, report.filteredCount > 0 || report.eventCount > 0 {
                     summaryCards(report)
-                    modelShareChart(report)
-                    timelineChart(report)
-                    // Tables adapt to active filters (not one fixed layout for everything).
-                    modelBreakdownTable(report)
-                    if worktreeSelection.isEmpty, !report.byWorktree.isEmpty {
-                        worktreeTable(report.byWorktree)
-                    }
-                    bucketTable(report.buckets)
+                    charts(report)
+                    dynamicTable(report.table)
                     ledgerFooter(report)
                 } else {
                     emptyState
@@ -52,6 +47,7 @@ struct UsageView: View {
         .onChange(of: appModel.usageScope) { _, _ in reloadRaw() }
         .onChange(of: appModel.openCompany?.node.id) { _, _ in reloadRaw() }
         .onChange(of: worktreeSelection) { _, _ in reaggregate() }
+        .onChange(of: modelSelection) { _, _ in reaggregate() }
         .onChange(of: rangeStart) { _, _ in reaggregate() }
         .onChange(of: rangeEnd) { _, _ in reaggregate() }
         .onChange(of: bucket) { _, _ in reaggregate() }
@@ -99,26 +95,25 @@ struct UsageView: View {
             Text(L10n.usageFilters)
                 .font(.headline)
 
-            // Scope is set by where Analytics was opened (holding / company / staff).
-
-            HStack(alignment: .firstTextBaseline, spacing: 16) {
-                DatePicker(L10n.usageFrom, selection: $rangeStart, displayedComponents: .date)
-                    .labelsHidden()
-                    .frame(maxWidth: 160)
-                Text("→").foregroundStyle(.secondary)
-                DatePicker(L10n.usageTo, selection: $rangeEnd, displayedComponents: .date)
-                    .labelsHidden()
-                    .frame(maxWidth: 160)
+            // Time range
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.usageFrom).font(.caption).foregroundStyle(.secondary)
+                    DatePicker("", selection: $rangeStart, displayedComponents: .date)
+                        .labelsHidden()
+                }
+                Text("→").padding(.top, 16)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.usageTo).font(.caption).foregroundStyle(.secondary)
+                    DatePicker("", selection: $rangeEnd, displayedComponents: .date)
+                        .labelsHidden()
+                }
                 Spacer()
             }
 
-            HStack(spacing: 8) {
-                Text(L10n.usageFrom).font(.caption).foregroundStyle(.secondary)
-                Spacer().frame(width: 120)
-                Text(L10n.usageTo).font(.caption).foregroundStyle(.secondary)
-            }
-
-            Picker(L10n.usageBucket, selection: $bucket) {
+            // Bucket — one tap switches table row grain
+            Text(L10n.usageBucket).font(.caption).foregroundStyle(.secondary)
+            Picker("", selection: $bucket) {
                 Text(L10n.usageBucketDay).tag(UsageBucket.day)
                 Text(L10n.usageBucketWeek).tag(UsageBucket.week)
                 Text(L10n.usageBucketMonth).tag(UsageBucket.month)
@@ -127,12 +122,23 @@ struct UsageView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 480)
 
+            // Worktree — All adds worktree column/rows; one value filters
             Picker(L10n.usageWorktree, selection: $worktreeSelection) {
                 Text(L10n.usageWorktreeAll).tag("")
                 ForEach(report?.availableWorktrees ?? distinctWorktrees(), id: \.self) { wt in
                     Text(wt).tag(wt)
                 }
             }
+            .frame(maxWidth: 420)
+
+            // Model — All adds model columns; one value filters + single model column
+            Picker(L10n.usageColModel, selection: $modelSelection) {
+                Text(L10n.usageModelAll).tag("")
+                Text("grok").tag("grok")
+                Text("claude").tag("claude")
+                Text("codex").tag("codex")
+            }
+            .pickerStyle(.segmented)
             .frame(maxWidth: 420)
 
             HStack {
@@ -142,24 +148,32 @@ struct UsageView: View {
                 Button(L10n.usagePresetAll) { applyAllDataRange() }
             }
             .buttonStyle(.borderless)
+
+            Text(tableShapeHint)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private var bucketTableTitle: String {
-        switch bucket {
-        case .day: return L10n.usageTableByDay
-        case .week: return L10n.usageTableByWeek
-        case .month: return L10n.usageTableByMonth
-        case .year: return L10n.usageTableByYear
+    private var tableShapeHint: String {
+        var parts: [String] = [L10n.usageHintRowsPeriod]
+        if worktreeSelection.isEmpty {
+            parts.append(L10n.usageHintRowsWorktree)
         }
+        if modelSelection.isEmpty {
+            parts.append(L10n.usageHintColsModels)
+        } else {
+            parts.append(L10n.usageHintColsOneModel(modelSelection))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func summaryCards(_ report: UsageReport) -> some View {
         HStack(spacing: 12) {
-            metricCard(L10n.usageRangeTotal, report.rangeTotal.total)
+            metricCard(L10n.usageRangeTotal, report.rangeTotal)
             metricCard(L10n.usageEvents, report.filteredCount)
             metricCard(L10n.usageEventsLoaded, report.eventCount)
         }
@@ -178,57 +192,49 @@ struct UsageView: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    /// Pie/sector share of models in the selected range.
-    private func modelShareChart(_ report: UsageReport) -> some View {
-        let slices = report.rangeTotal.byModel.filter { chartModels.contains($0.model) }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.usageChartModels)
-                .font(.headline)
-            if report.rangeTotal.total == 0 {
-                Text(L10n.usageNoRows)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Chart(slices) { slice in
-                    SectorMark(
-                        angle: .value(L10n.usageColTotal, slice.tokens),
-                        innerRadius: .ratio(0.45),
-                        angularInset: 1.5
-                    )
-                    .foregroundStyle(by: .value(L10n.usageColModel, slice.model))
-                    .cornerRadius(3)
-                }
-                .chartForegroundStyleScale([
-                    "grok": Color.orange,
-                    "claude": Color.purple,
-                    "codex": Color.blue,
-                ])
-                .frame(height: 220)
-                .padding(12)
-                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-            }
-        }
-    }
+    // MARK: - Charts (follow same filters)
 
-    /// Stacked bars over buckets (day/week/month/year).
-    private func timelineChart(_ report: UsageReport) -> some View {
-        let points: [UsageChartPoint] = report.buckets.reversed().flatMap { row in
-            chartModels.map { model in
-                UsageChartPoint(
-                    period: displayPeriod(row.label),
-                    model: model,
-                    tokens: row.byModel.first { $0.model == model }?.tokens ?? 0
-                )
+    private func charts(_ report: UsageReport) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Model share — only when model filter is All (otherwise trivial)
+            if modelSelection.isEmpty {
+                let slices = chartModels.map {
+                    UsageModelBreakdown(model: $0, tokens: report.rangeByModel[$0] ?? 0)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L10n.usageChartModels).font(.headline)
+                    Chart(slices) { slice in
+                        SectorMark(
+                            angle: .value(L10n.usageColTotal, max(slice.tokens, 0)),
+                            innerRadius: .ratio(0.45),
+                            angularInset: 1.5
+                        )
+                        .foregroundStyle(by: .value(L10n.usageColModel, slice.model))
+                        .cornerRadius(3)
+                    }
+                    .chartForegroundStyleScale([
+                        "grok": Color.orange,
+                        "claude": Color.purple,
+                        "codex": Color.blue,
+                    ])
+                    .frame(height: 200)
+                    .padding(12)
+                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+                }
             }
-        }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.usageChartTimeline)
-                .font(.headline)
-            if report.buckets.isEmpty {
-                Text(L10n.usageNoRows)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
+
+            let points: [UsageChartPoint] = report.chartBuckets.flatMap { bucket in
+                let models = modelSelection.isEmpty ? chartModels : [modelSelection]
+                return models.map { model in
+                    UsageChartPoint(
+                        period: bucket.period,
+                        model: model,
+                        tokens: bucket.byModel[model] ?? 0
+                    )
+                }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.usageChartTimeline).font(.headline)
                 Chart(points) { point in
                     BarMark(
                         x: .value(L10n.usageColPeriod, point.period),
@@ -241,141 +247,69 @@ struct UsageView: View {
                     "claude": Color.purple,
                     "codex": Color.blue,
                 ])
-                .chartXAxis {
-                    AxisMarks(values: .automatic) { _ in
-                        AxisGridLine()
-                        AxisValueLabel()
-                    }
-                }
-                .frame(height: 260)
+                .frame(height: 240)
                 .padding(12)
                 .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
 
-    /// Range filter → rows are models (share of selected range).
-    private func modelBreakdownTable(_ report: UsageReport) -> some View {
-        let total = max(report.rangeTotal.total, 1)
-        let rows = report.rangeTotal.byModel.filter { chartModels.contains($0.model) }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.usageTableByModel)
-                .font(.headline)
-            Text(L10n.usageTableByModelHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
-                GridRow {
-                    Text(L10n.usageColModel).fontWeight(.semibold)
-                    Text(L10n.usageColTotal).fontWeight(.semibold)
-                    Text(L10n.usageColShare).fontWeight(.semibold)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Divider().gridCellColumns(3)
-                ForEach(rows) { row in
-                    GridRow {
-                        Text(row.model)
-                        Text(row.tokens.formatted()).monospacedDigit()
-                        Text(shareString(row.tokens, of: total)).monospacedDigit()
-                    }
-                    .font(.callout)
-                }
-                Divider().gridCellColumns(3)
-                GridRow {
-                    Text(L10n.usageRangeTotal).fontWeight(.semibold)
-                    Text(report.rangeTotal.total.formatted()).fontWeight(.semibold).monospacedDigit()
-                    Text("100%").fontWeight(.semibold)
-                }
-                .font(.callout)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
+    // MARK: - Single dynamic table
 
-    /// Worktree filter = all → break down by worktree for the range.
-    private func worktreeTable(_ rows: [UsagePeriodRow]) -> some View {
+    private func dynamicTable(_ table: UsageDynamicTable) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.usageTableByWorktree)
+            Text(L10n.usageTable)
                 .font(.headline)
-            Text(L10n.usageTableByWorktreeHelp)
+            Text(L10n.usageTableHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                GridRow {
-                    Text(L10n.usageWorktree).fontWeight(.semibold)
-                    Text(L10n.usageColTotal).fontWeight(.semibold)
-                    Text("grok").fontWeight(.semibold)
-                    Text("claude").fontWeight(.semibold)
-                    Text("codex").fontWeight(.semibold)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Divider().gridCellColumns(5)
-                ForEach(rows) { row in
-                    GridRow {
-                        Text(row.label)
-                        Text(row.total.formatted()).monospacedDigit()
-                        Text(token(row, "grok")).monospacedDigit()
-                        Text(token(row, "claude")).monospacedDigit()
-                        Text(token(row, "codex")).monospacedDigit()
-                    }
-                    .font(.callout)
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
 
-    /// Bucket filter → periods as rows (day/week/month/year).
-    private func bucketTable(_ rows: [UsagePeriodRow]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(bucketTableTitle)
-                .font(.headline)
-            Text(L10n.usageTableByBucketHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if rows.isEmpty {
+            if table.rows.isEmpty {
                 Text(L10n.usageNoRows)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                    GridRow {
-                        Text(L10n.usageColPeriod).fontWeight(.semibold)
-                        Text(L10n.usageColTotal).fontWeight(.semibold)
-                        Text("grok").fontWeight(.semibold)
-                        Text("claude").fontWeight(.semibold)
-                        Text("codex").fontWeight(.semibold)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    Divider().gridCellColumns(5)
-                    ForEach(rows) { row in
+                ScrollView(.horizontal, showsIndicators: true) {
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
                         GridRow {
-                            Text(displayPeriod(row.label))
-                            Text(row.total.formatted()).monospacedDigit()
-                            Text(token(row, "grok")).monospacedDigit()
-                            Text(token(row, "claude")).monospacedDigit()
-                            Text(token(row, "codex")).monospacedDigit()
+                            ForEach(table.columns) { col in
+                                Text(columnTitle(col))
+                                    .fontWeight(.semibold)
+                            }
                         }
-                        .font(.callout)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        Divider().gridCellColumns(max(table.columns.count, 1))
+
+                        ForEach(table.rows) { row in
+                            GridRow {
+                                ForEach(table.columns) { col in
+                                    let raw = row.cells[col.key] ?? "—"
+                                    if col.key == "period" || col.key == "worktree" {
+                                        Text(raw)
+                                    } else {
+                                        Text((Int(raw) ?? 0).formatted()).monospacedDigit()
+                                    }
+                                }
+                            }
+                            .font(.callout)
+                        }
                     }
+                    .padding(12)
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
 
-    private func shareString(_ part: Int, of total: Int) -> String {
-        let pct = Double(part) / Double(max(total, 1)) * 100
-        return String(format: "%.1f%%", pct)
+    private func columnTitle(_ col: UsageTableColumn) -> String {
+        switch col.key {
+        case "period": return L10n.usageColPeriod
+        case "worktree": return L10n.usageWorktree
+        case "total": return L10n.usageColTotal
+        default: return col.title
+        }
     }
 
     private var emptyState: some View {
@@ -386,7 +320,6 @@ struct UsageView: View {
                 description: Text(L10n.usageEmptyBody)
             )
             .frame(maxWidth: .infinity)
-
             Text(L10n.usageSchemaHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -404,11 +337,6 @@ struct UsageView: View {
             Text(L10n.usageLedgerPaths)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if report.ledgerPaths.isEmpty {
-                Text(L10n.noneEmdash)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
             ForEach(report.ledgerPaths, id: \.path) { url in
                 Text(url.path)
                     .font(.caption2)
@@ -420,9 +348,7 @@ struct UsageView: View {
 
     private var schemaExample: String {
         """
-        # cache/usage/events.jsonl
-        {"timestamp":"2026-09-18T10:00:00Z","company":"desk-garden-company","staff":"ceo","worktree":"feat-x","model":"grok","launch_mode":"grok","total_tokens":120}
-        {"timestamp":"2026-09-18T11:00:00Z","company":"desk-garden-company","staff":"ba-user","worktree":"feat-x","model":"claude","launch_mode":"merge","total_tokens":50}
+        {"timestamp":"2026-09-18T10:00:00Z","company":"demo-analytics-lab-company","staff":"ceo","worktree":"feat-x","model":"grok","total_tokens":120}
         """
     }
 
@@ -460,8 +386,8 @@ struct UsageView: View {
         var end = rangeEnd
         if start > end { swap(&start, &end) }
         let query = UsageQuery(
-            scopeCompany: true,
             worktree: worktreeSelection.isEmpty ? nil : worktreeSelection,
+            model: modelSelection.isEmpty ? nil : modelSelection,
             rangeStart: start,
             rangeEnd: end,
             bucket: bucket
@@ -489,15 +415,6 @@ struct UsageView: View {
 
     private func distinctWorktrees() -> [String] {
         Array(Set(rawEvents.compactMap(\.worktree).filter { !$0.isEmpty })).sorted()
-    }
-
-    private func token(_ row: UsagePeriodRow, _ model: String) -> String {
-        (row.byModel.first { $0.model == model }?.tokens ?? 0).formatted()
-    }
-
-    private func displayPeriod(_ label: String) -> String {
-        if label == "range" { return L10n.usageRangeTotal }
-        return label
     }
 }
 

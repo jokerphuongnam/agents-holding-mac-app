@@ -86,7 +86,7 @@
 
 /* Usage */
 "usage_placeholder" = "Token stats by staff / model / worktree / day·month — plan P4. Merge traffic attributes to the resolved model.";
-"usage_help" = "Filter by date range, worktree, and bucket (day/week/month/year). Tables break down grok / claude / codex.";
+"usage_help" = "One table shaped by filters: time bucket, worktree, model. Columns/rows appear to match what you select.";
 "usage_scope" = "Scope";
 "usage_scope_holding" = "Holding";
 "usage_scope_company" = "Open company";
@@ -131,6 +131,13 @@
 "usage_table_by_worktree" = "By worktree (selected range)";
 "usage_table_by_worktree_help" = "Shown when Worktree = All — compare worktrees in this range.";
 "usage_table_by_bucket_help" = "Fits the Bucket filter — one row per day/week/month/year.";
+"usage_table" = "Table";
+"usage_table_help" = "Single table — structure follows the filters above.";
+"usage_model_all" = "All models";
+"usage_hint_rows_period" = "rows: period";
+"usage_hint_rows_worktree" = "rows also split by worktree";
+"usage_hint_cols_models" = "cols: total + grok/claude/codex";
+"usage_hint_cols_one_model" = "cols: total + %@";
 "usage_staff_button_help" = "Open analytics for this staff";
 "usage_company_button_help" = "Open analytics for this company and its children";
 "usage_holding_button_help" = "Open analytics for all companies in the holding";
