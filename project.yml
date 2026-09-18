@@ -4,10 +4,15 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+  knownRegions:
+    - en
+    - vi
+    - Base
 settings:
   base:
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
+    DEVELOPMENT_LANGUAGE: en
 packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui

@@ -13,10 +13,10 @@ struct StaffDetailView: View {
                         orgSection(detail)
                         scopeSection(detail)
                         FileListSection(
-                            title: "Skills (files)",
+                            title: L10n.tr("skills_files"),
                             systemImage: "book",
                             files: detail.skillFiles,
-                            emptyText: "No skills under system/skills/customs/\(detail.node.team)/\(detail.node.name)/"
+                            emptyText: L10n.tr("skills_empty", detail.node.team, detail.node.name)
                         ) { file in
                             appModel.openSkill(
                                 SkillRef(
@@ -27,10 +27,10 @@ struct StaffDetailView: View {
                             )
                         }
                         FileListSection(
-                            title: "Scripts (files)",
+                            title: L10n.tr("scripts_files"),
                             systemImage: "terminal",
                             files: detail.scriptFiles,
-                            emptyText: "No scripts under this staff’s skill folders"
+                            emptyText: L10n.tr("scripts_empty")
                         ) { file in
                             appModel.openCodeFile(file)
                         }
@@ -41,12 +41,12 @@ struct StaffDetailView: View {
                 }
                 .navigationTitle(detail.node.name)
             } else {
-                ContentUnavailableView("Staff not found", systemImage: "person.slash")
+                ContentUnavailableView(L10n.tr("staff_not_found"), systemImage: "person.slash")
             }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Back") { appModel.backFromStaff() }
+                Button(L10n.tr("back")) { appModel.backFromStaff() }
             }
         }
     }
@@ -55,7 +55,7 @@ struct StaffDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(detail.node.name)
                 .font(.largeTitle.weight(.semibold))
-            Text("Team: \(detail.node.team)")
+            Text(L10n.tr("team", detail.node.team))
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 if !detail.tier.isEmpty {
@@ -88,14 +88,14 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func orgSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Org (hop chain)", systemImage: "arrow.up.arrow.down")
+            Label(L10n.tr("org_hop_chain"), systemImage: "arrow.up.arrow.down")
                 .font(.headline)
-            Text("Cấp trên = staff có thể Assign/hop để ra lệnh cho người này. Cấp dưới = người này hop ra lệnh được.")
+            Text(L10n.tr("org_hop_help"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .top) {
-                Text("Cấp trên (có thể hop → mình)")
+                Text(L10n.tr("superior_label"))
                     .foregroundStyle(.secondary)
                     .frame(width: 200, alignment: .leading)
                 if let lead = detail.lead, !lead.isEmpty {
@@ -112,15 +112,16 @@ struct StaffDetailView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .help(L10n.tr("open_superior"))
                 } else {
-                    Text("— (top dispatcher)")
+                    Text(L10n.tr("top_dispatcher"))
                         .foregroundStyle(.tertiary)
                 }
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Cấp dưới (mình hop → họ)")
+                    Text(L10n.tr("reports_label"))
                         .foregroundStyle(.secondary)
                     if !detail.reports.isEmpty {
                         Text("\(detail.reports.count)")
@@ -131,7 +132,7 @@ struct StaffDetailView: View {
                     }
                 }
                 if detail.reports.isEmpty {
-                    Text("Không hop xuống staff nào (leaf)")
+                    Text(L10n.tr("no_reports_leaf"))
                         .foregroundStyle(.tertiary)
                 } else {
                     VStack(spacing: 0) {
@@ -175,20 +176,20 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func scopeSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Path fence (filesystem)", systemImage: "folder.badge.gearshape")
+            Label(L10n.tr("path_fence"), systemImage: "folder.badge.gearshape")
                 .font(.headline)
-            Text("Staff không đọc cả project — chỉ các path được cấp dưới đây (cộng với skills).")
+            Text(L10n.tr("path_fence_help"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             if detail.allowedPaths.isEmpty && detail.deniedHints.isEmpty {
-                Text("Chưa parse được path fence từ staff md / SCOPE.md — xem brief bên dưới.")
+                Text(L10n.tr("path_fence_empty"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             if !detail.allowedPaths.isEmpty {
-                Text("Allowed / RW")
+                Text(L10n.tr("allowed_rw"))
                     .font(.subheadline.weight(.semibold))
                 ForEach(detail.allowedPaths, id: \.self) { path in
                     Text(path)
@@ -198,7 +199,7 @@ struct StaffDetailView: View {
             }
 
             if !detail.deniedHints.isEmpty {
-                Text("Denied / must not")
+                Text(L10n.tr("denied_must_not"))
                     .font(.subheadline.weight(.semibold))
                     .padding(.top, 4)
                 ForEach(detail.deniedHints, id: \.self) { path in
@@ -216,7 +217,7 @@ struct StaffDetailView: View {
 
     private func bodySection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Staff brief", systemImage: "doc.richtext")
+            Label(L10n.tr("staff_brief"), systemImage: "doc.richtext")
                 .font(.headline)
             Markdown(detail.bodyMarkdown)
                 .markdownTheme(.gitHub)

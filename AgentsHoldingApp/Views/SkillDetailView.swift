@@ -26,12 +26,12 @@ struct SkillDetailView: View {
                 }
                 .navigationTitle(skill.skillID)
             } else {
-                ContentUnavailableView("Skill not found", systemImage: "book.closed")
+                ContentUnavailableView(L10n.tr("skill_not_found"), systemImage: "book.closed")
             }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Back") { appModel.backFromSkill() }
+                Button(L10n.tr("back")) { appModel.backFromSkill() }
             }
         }
     }

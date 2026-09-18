@@ -1,0 +1,145 @@
+/* Language */
+"language_system" = "Theo hệ thống";
+"language_english" = "Tiếng Anh";
+"language_vietnamese" = "Tiếng Việt";
+"language_section" = "Ngôn ngữ";
+"language_picker" = "Ngôn ngữ app";
+
+/* Common */
+"back" = "Quay lại";
+"cancel" = "Hủy";
+"close" = "Đóng";
+"done" = "Xong";
+"next" = "Tiếp";
+"add" = "Thêm";
+"clear" = "Xóa";
+"browse" = "Chọn…";
+"reload" = "Tải lại";
+"working" = "Đang chạy…";
+"install" = "Cài đặt";
+"parent" = "Công ty cha";
+"holding" = "Holding";
+"usage" = "Usage";
+"settings" = "Cài đặt";
+"navigate" = "Điều hướng";
+"actions" = "Thao tác";
+"companies" = "Công ty";
+"team" = "Team: %@";
+"none_emdash" = "—";
+
+/* Holding */
+"add_company" = "Thêm company";
+"add_company_help" = "Chọn folder để cài hoặc đăng ký company";
+"holding_stats" = "%d companies · %d teams · %d staff";
+"holding_companies_empty" = "Chưa có company — bấm Thêm để chọn folder và cài đặt.";
+"holding_staffs" = "Nhân sự holding";
+"holding_staffs_empty" = "Không có staff holding dưới system/staffs";
+"holding_not_found" = "Không tìm thấy holding";
+"reload_holding" = "Tải lại holding";
+
+/* Sidebar */
+"holding_staffs_section" = "Nhân sự holding";
+"in_company" = "Trong %@";
+"child_companies" = "Company con";
+"add_company_hint" = "Thêm company: nút + trên Holding (chọn folder).";
+
+/* Company */
+"no_company_open" = "Chưa mở company";
+"pick_company_hint" = "Chọn một company từ Holding.";
+"child_companies_title" = "Company con";
+"no_child_companies" = "Không có company con";
+"teams_staffs" = "Teams & staffs";
+"no_teams" = "Không có team dưới system/staffs";
+"no_staffs_in_team" = "Không có staff trong team này";
+"company_scripts" = "Scripts company (install)";
+"company_scripts_empty" = "Không có script install cấp company";
+"company_skills" = "Skills company";
+"reports_badge" = "%d cấp dưới";
+
+/* Staff detail */
+"org_hop_chain" = "Org (chuỗi hop)";
+"org_hop_help" = "Cấp trên = staff có thể Assign/hop để ra lệnh cho người này. Cấp dưới = người này hop ra lệnh được.";
+"superior_label" = "Cấp trên (có thể hop → mình)";
+"reports_label" = "Cấp dưới (mình hop → họ)";
+"top_dispatcher" = "— (đỉnh điều phối)";
+"no_reports_leaf" = "Không hop xuống staff nào (leaf)";
+"path_fence" = "Path fence (filesystem)";
+"path_fence_help" = "Staff không đọc cả project — chỉ các path được cấp dưới đây (cộng với skills).";
+"path_fence_empty" = "Chưa parse được path fence từ staff md / SCOPE.md — xem brief bên dưới.";
+"allowed_rw" = "Được phép / RW";
+"denied_must_not" = "Cấm / must not";
+"skills_files" = "Skills (files)";
+"skills_empty" = "Không có skills dưới system/skills/customs/%@/%@/";
+"scripts_files" = "Scripts (files)";
+"scripts_empty" = "Không có scripts trong folder skill của staff này";
+"staff_brief" = "Staff brief";
+"staff_not_found" = "Không tìm thấy staff";
+"open_superior" = "Mở detail cấp trên";
+"open_report" = "Mở detail %@";
+
+/* Files */
+"file_not_found" = "Không tìm thấy file";
+"skill_not_found" = "Không tìm thấy skill";
+
+/* Usage */
+"usage_placeholder" = "Thống kê token theo staff / model / worktree / ngày·tháng — plan P4. Merge gán theo model đã resolve.";
+
+/* Settings */
+"holding_path" = "Đường dẫn holding";
+"holding_path_help" = "SoT khuyến nghị: ~/Documents/Agents/agents-holding (không dùng ~/.agents — sqlite inventory khác). Env: AGENTS_HOLDING_PATH.";
+"active_path" = "Đang dùng: %@";
+"use_documents_holding" = "Dùng Documents/Agents/agents-holding";
+"apply_reload" = "Áp dụng & tải lại";
+
+/* Add company */
+"add_company_title" = "Thêm company";
+"step_folder" = "1 · Folder & slug";
+"step_roster" = "2 · Staffs — bấm staff để skills / access / description";
+"step_confirm" = "3 · Xác nhận";
+"folder_help" = "Chọn folder project. App tự nhận: đã có `.agents/*-company` → register; chưa có → create-company.";
+"folder_not_chosen" = "Chưa chọn folder";
+"company_name_slug" = "Tên company (slug)";
+"budget" = "Budget";
+"mode_register" = "Tự nhận: đã có %@ → register + apply roster.";
+"mode_create" = "Tự nhận: chưa có Company OS → create-company + apply roster.";
+"roster_help" = "List staff căn trái. Bấm một dòng để skills (library), access (browse), description. Staff mới: skills gắn đúng staff đó.";
+"add_staff" = "Thêm staff";
+"recommended_set" = "Bộ recommended";
+"add_staff_title" = "Thêm staff";
+"tab_existing" = "Có sẵn";
+"tab_custom" = "Custom staff";
+"existing_help" = "Chọn staff có sẵn trong template — không cần description (lấy từ catalog). Có thể gắn skills/access sau khi thêm.";
+"existing_all_added" = "Mọi template staff đã có trong roster.";
+"custom_help" = "Custom staff — bắt buộc description. Skills/access gắn riêng staff này ở editor tiếp theo.";
+"name_slug" = "name (slug)";
+"team_field" = "team";
+"description" = "Description";
+"add_custom" = "Thêm custom";
+"new_staff_badge" = "mới";
+"skills_count" = "%d skills";
+"paths_count" = "%d paths";
+"mode_auto_register" = "Tự động: register Company OS có sẵn";
+"mode_auto_create" = "Tự động: create-company";
+"staffs_label" = "Staffs";
+"folder_label" = "Folder";
+"slug_label" = "Slug";
+"budget_label" = "Budget";
+"mode_label" = "Mode";
+"holding_path_missing" = "Thiếu đường dẫn holding";
+
+/* Staff editor */
+"new_staff_editor_hint" = "Staff mới — skills/access gắn riêng staff này";
+"template_staff" = "Staff template";
+"description_required_custom" = "Bắt buộc với custom staff.";
+"template_description_readonly" = "Staff template — description lấy từ catalog (không cần nhập lại).";
+"access_files" = "Access (files/folders)";
+"access_help" = "Browse để allow path staff được làm việc.";
+"browse_allow" = "Browse allow…";
+"skills_library_staff" = "Skills (library → staff này)";
+"filter_placeholder" = "Lọc…";
+
+/* Panels */
+"choose_folder_install" = "Chọn folder project để cài / đăng ký company";
+"choose" = "Chọn";
+"choose_allow_paths" = "Chọn file/folder staff được phép làm việc (có thể chọn nhiều)";
+"allow" = "Cho phép";

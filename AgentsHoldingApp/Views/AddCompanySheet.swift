@@ -30,9 +30,15 @@ struct AddCompanySheet: View {
     @State private var newStaffDescription = ""
 
     private enum AddStaffTab: String, CaseIterable, Identifiable {
-        case existing = "Có sẵn"
-        case custom = "Custom staff"
+        case existing
+        case custom
         var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .existing: return L10n.tr("tab_existing")
+            case .custom: return L10n.tr("tab_custom")
+            }
+        }
     }
 
     @State private var isWorking = false
@@ -80,7 +86,7 @@ struct AddCompanySheet: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Add company")
+                Text(L10n.tr("add_company_title"))
                     .font(.title2.weight(.semibold))
                 Text(stepTitle)
                     .font(.caption)
@@ -100,9 +106,9 @@ struct AddCompanySheet: View {
 
     private var stepTitle: String {
         switch step {
-        case .folder: return "1 · Folder & slug"
-        case .roster: return "2 · Staffs (leading) — bấm staff để skills / access / description"
-        case .confirm: return "3 · Confirm"
+        case .folder: return L10n.tr("step_folder")
+        case .roster: return L10n.tr("step_roster")
+        case .confirm: return L10n.tr("step_confirm")
         }
     }
 
@@ -117,18 +123,18 @@ struct AddCompanySheet: View {
 
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Chọn folder project. App tự hiểu: đã có `.agents/*-company` → register; chưa có → create-company.")
+            Text(L10n.tr("folder_help"))
                 .foregroundStyle(.secondary)
             HStack(alignment: .top) {
-                Text(projectRootPath.isEmpty ? "Chưa chọn folder" : projectRootPath)
+                Text(projectRootPath.isEmpty ? L10n.tr("folder_not_chosen") : projectRootPath)
                     .font(.system(.body, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                Button("Browse…") { browse() }
+                Button(L10n.tr("browse")) { browse() }
             }
-            TextField("Company name (slug)", text: $name)
+            TextField(L10n.tr("company_name_slug"), text: $name)
                 .textFieldStyle(.roundedBorder)
-            Picker("Budget", selection: $budget) {
+            Picker(L10n.tr("budget"), selection: $budget) {
                 ForEach(budgets, id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -143,7 +149,7 @@ struct AddCompanySheet: View {
 
     private var rosterStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Danh sách staff leading-aligned. Bấm một dòng để chọn skills (library), access (browse), description. Staff mới: skills gắn đúng staff đó.")
+            Text(L10n.tr("roster_help"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -156,10 +162,10 @@ struct AddCompanySheet: View {
                     newStaffDescription = ""
                     showAddStaff = true
                 } label: {
-                    Label("Add staff", systemImage: "person.badge.plus")
+                    Label(L10n.tr("add_staff"), systemImage: "person.badge.plus")
                 }
                 Spacer()
-                Button("Recommended set") { applyRecommended() }
+                Button(L10n.tr("recommended_set")) { applyRecommended() }
                     .buttonStyle(.borderless)
             }
 
@@ -181,7 +187,7 @@ struct AddCompanySheet: View {
                                         .padding(.vertical, 1)
                                         .background(.quaternary, in: Capsule())
                                     if staff.isNew {
-                                        Text("new")
+                                        Text(L10n.tr("new_staff_badge"))
                                             .font(.caption2)
                                             .foregroundStyle(.orange)
                                     }
@@ -192,8 +198,8 @@ struct AddCompanySheet: View {
                                     .lineLimit(2)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 HStack(spacing: 10) {
-                                    Label("\(staff.selectedSkillIDs.count) skills", systemImage: "book")
-                                    Label("\(staff.allowPaths.count) paths", systemImage: "folder")
+                                    Label(L10n.tr("skills_count", staff.selectedSkillIDs.count), systemImage: "book")
+                                    Label(L10n.tr("paths_count", staff.allowPaths.count), systemImage: "folder")
                                 }
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
@@ -227,10 +233,10 @@ struct AddCompanySheet: View {
 
     private var confirmStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            labeled("Folder", projectRootPath)
-            labeled("Slug", name)
-            labeled("Budget", budget)
-            labeled("Mode", registerOnly ? "Auto: register existing Company OS" : "Auto: create-company")
+            labeled(L10n.tr("folder_label"), projectRootPath)
+            labeled(L10n.tr("slug_label"), name)
+            labeled(L10n.tr("budget_label"), budget)
+            labeled(L10n.tr("mode_label"), registerOnly ? L10n.tr("mode_auto_register") : L10n.tr("mode_auto_create"))
             labeled(
                 "Staffs",
                 roster.map {
@@ -259,22 +265,22 @@ struct AddCompanySheet: View {
         let existing = Set(roster.map(\.name))
         let available = templateCatalog.filter { !existing.contains($0.name) }
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Add staff")
+            Text(L10n.tr("add_staff_title"))
                 .font(.headline)
             Picker("", selection: $addStaffTab) {
                 ForEach(AddStaffTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+                    Text(tab.title).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
 
             if addStaffTab == .existing {
-                Text("Chọn staff có sẵn trong template — không cần description (đã có từ catalog). Có thể gắn skills/access sau khi thêm.")
+                Text(L10n.tr("existing_help"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if available.isEmpty {
-                    Text("Mọi template staff đã có trong roster.")
+                    Text(L10n.tr("existing_all_added"))
                         .foregroundStyle(.secondary)
                 } else {
                     List(available) { staff in
@@ -295,13 +301,13 @@ struct AddCompanySheet: View {
                     }
                 }
             } else {
-                Text("Custom staff — bắt buộc description. Skills/access gắn riêng staff này ở bước editor.")
+                Text(L10n.tr("custom_help"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                TextField("name (slug)", text: $newStaffName)
-                TextField("team", text: $newStaffTeam)
-                Text("Description")
+                TextField(L10n.tr("name_slug"), text: $newStaffName)
+                TextField(L10n.tr("team_field"), text: $newStaffTeam)
+                Text(L10n.tr("description"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextEditor(text: $newStaffDescription)
@@ -311,9 +317,9 @@ struct AddCompanySheet: View {
 
             HStack {
                 Spacer()
-                Button("Close") { showAddStaff = false }
+                Button(L10n.tr("close")) { showAddStaff = false }
                 if addStaffTab == .custom {
-                    Button("Add custom") {
+                    Button(L10n.tr("add_custom")) {
                         let n = newStaffName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                         guard !n.isEmpty, !roster.contains(where: { $0.name == n }) else { return }
                         let draft = StaffDraft(
@@ -346,21 +352,21 @@ struct AddCompanySheet: View {
 
     private var footer: some View {
         HStack {
-            Button("Cancel") { dismiss() }
+            Button(L10n.tr("cancel")) { dismiss() }
             Spacer()
             if step != .folder {
-                Button("Back") {
+                Button(L10n.tr("back")) {
                     if let prev = Step(rawValue: step.rawValue - 1) { step = prev }
                 }
             }
             if step != .confirm {
-                Button("Next") {
+                Button(L10n.tr("next")) {
                     if let next = Step(rawValue: step.rawValue + 1) { step = next }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canAdvance)
             } else {
-                Button(isWorking ? "Working…" : "Install") {
+                Button(isWorking ? L10n.tr("working") : L10n.tr("install")) {
                     Task { await install() }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -420,8 +426,8 @@ struct AddCompanySheet: View {
         let existing = installer.existingCompanyDirs(in: url)
         registerOnly = !existing.isEmpty
         modeHint = registerOnly
-            ? "Tự nhận: đã có \(existing.map(\.lastPathComponent).joined(separator: ", ")) → register + apply roster."
-            : "Tự nhận: chưa có Company OS → create-company + apply roster."
+            ? L10n.tr("mode_register", existing.map(\.lastPathComponent).joined(separator: ", "))
+            : L10n.tr("mode_create")
         localError = nil
     }
 
@@ -432,7 +438,7 @@ struct AddCompanySheet: View {
         isWorking = true
         defer { isWorking = false }
         guard let holding = appModel.holdingPath else {
-            localError = "Holding path missing"
+            localError = L10n.tr("holding_path_missing")
             return
         }
 
@@ -523,12 +529,12 @@ struct StaffEditorSheet: View {
             HStack {
                 VStack(alignment: .leading) {
                     Text(draft.name).font(.title3.weight(.semibold))
-                    Text(draft.isNew ? "New staff — skills/access gắn riêng staff này" : "Template staff")
+                    Text(draft.isNew ? L10n.tr("new_staff_editor_hint") : L10n.tr("template_staff"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Done") { dismiss() }
+                Button(L10n.tr("done")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(16)
@@ -537,8 +543,8 @@ struct StaffEditorSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if draft.isNew {
                         Group {
-                            Text("Description").font(.headline)
-                            Text("Bắt buộc với custom staff.")
+                            Text(L10n.tr("description")).font(.headline)
+                            Text(L10n.tr("description_required_custom"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             TextEditor(text: $draft.description)
@@ -548,25 +554,25 @@ struct StaffEditorSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Group {
-                            Text("Description").font(.headline)
+                            Text(L10n.tr("description")).font(.headline)
                             Text(draft.blurb.isEmpty ? "—" : draft.blurb)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            Text("Staff template — description lấy từ catalog (không bắt buộc nhập lại).")
+                            Text(L10n.tr("template_description_readonly"))
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
                     }
 
                     Group {
-                        Text("Access (files/folders)").font(.headline)
-                        Text("Browse để allow path staff được làm việc.")
+                        Text(L10n.tr("access_files")).font(.headline)
+                        Text(L10n.tr("access_help"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {
-                            Button("Browse allow…") { browsePaths() }
-                            Button("Clear") { draft.allowPaths = [] }
+                            Button(L10n.tr("browse_allow")) { browsePaths() }
+                            Button(L10n.tr("clear")) { draft.allowPaths = [] }
                                 .disabled(draft.allowPaths.isEmpty)
                         }
                         ForEach(draft.allowPaths, id: \.self) { path in
@@ -585,8 +591,8 @@ struct StaffEditorSheet: View {
                     }
 
                     Group {
-                        Text("Skills (library → staff này)").font(.headline)
-                        TextField("Filter…", text: $skillFilter)
+                        Text(L10n.tr("skills_library_staff")).font(.headline)
+                        TextField(L10n.tr("filter_placeholder"), text: $skillFilter)
                             .textFieldStyle(.roundedBorder)
                         ForEach(filtered) { skill in
                             Toggle(isOn: skillBinding(skill.id)) {

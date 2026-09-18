@@ -43,8 +43,8 @@ struct CompanyInstallService {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.message = "Chọn folder project để cài / đăng ký company"
-        panel.prompt = "Choose"
+        panel.message = L10n.tr("choose_folder_install")
+        panel.prompt = L10n.tr("choose")
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -57,8 +57,8 @@ struct CompanyInstallService {
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
         panel.directoryURL = projectRoot
-        panel.message = "Chọn file/folder staff được phép làm việc (có thể chọn nhiều)"
-        panel.prompt = "Allow"
+        panel.message = L10n.tr("choose_allow_paths")
+        panel.prompt = L10n.tr("allow")
         guard panel.runModal() == .OK else { return [] }
         return panel.urls
     }

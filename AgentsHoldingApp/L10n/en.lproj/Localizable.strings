@@ -1,0 +1,145 @@
+/* Language */
+"language_system" = "System";
+"language_english" = "English";
+"language_vietnamese" = "Vietnamese";
+"language_section" = "Language";
+"language_picker" = "App language";
+
+/* Common */
+"back" = "Back";
+"cancel" = "Cancel";
+"close" = "Close";
+"done" = "Done";
+"next" = "Next";
+"add" = "Add";
+"clear" = "Clear";
+"browse" = "Browse…";
+"reload" = "Reload";
+"working" = "Working…";
+"install" = "Install";
+"parent" = "Parent";
+"holding" = "Holding";
+"usage" = "Usage";
+"settings" = "Settings";
+"navigate" = "Navigate";
+"actions" = "Actions";
+"companies" = "Companies";
+"team" = "Team: %@";
+"none_emdash" = "—";
+
+/* Holding */
+"add_company" = "Add company";
+"add_company_help" = "Choose a folder to install or register a company";
+"holding_stats" = "%d companies · %d teams · %d staff";
+"holding_companies_empty" = "No companies yet — tap Add to choose a folder and install.";
+"holding_staffs" = "Holding staffs";
+"holding_staffs_empty" = "No holding staffs under system/staffs";
+"holding_not_found" = "Holding not found";
+"reload_holding" = "Reload holding";
+
+/* Sidebar */
+"holding_staffs_section" = "Holding staffs";
+"in_company" = "In %@";
+"child_companies" = "Child companies";
+"add_company_hint" = "Add company: + on Holding (Browse folder).";
+
+/* Company */
+"no_company_open" = "No company open";
+"pick_company_hint" = "Pick a company from Holding.";
+"child_companies_title" = "Child companies";
+"no_child_companies" = "No child companies";
+"teams_staffs" = "Teams & staffs";
+"no_teams" = "No teams under system/staffs";
+"no_staffs_in_team" = "No staffs in this team";
+"company_scripts" = "Company scripts (install)";
+"company_scripts_empty" = "No company-wide install scripts";
+"company_skills" = "Company skills";
+"reports_badge" = "%d reports";
+
+/* Staff detail */
+"org_hop_chain" = "Org (hop chain)";
+"org_hop_help" = "Superior = staff who can Assign/hop to command this person. Reports = people this staff can hop to.";
+"superior_label" = "Superior (can hop → me)";
+"reports_label" = "Reports (I hop → them)";
+"top_dispatcher" = "— (top dispatcher)";
+"no_reports_leaf" = "No reports (leaf)";
+"path_fence" = "Path fence (filesystem)";
+"path_fence_help" = "Staff does not read the whole project — only paths granted below (plus skills).";
+"path_fence_empty" = "No path fence parsed from staff md / SCOPE.md — see brief below.";
+"allowed_rw" = "Allowed / RW";
+"denied_must_not" = "Denied / must not";
+"skills_files" = "Skills (files)";
+"skills_empty" = "No skills under system/skills/customs/%@/%@/";
+"scripts_files" = "Scripts (files)";
+"scripts_empty" = "No scripts under this staff’s skill folders";
+"staff_brief" = "Staff brief";
+"staff_not_found" = "Staff not found";
+"open_superior" = "Open superior detail";
+"open_report" = "Open %@ detail";
+
+/* Files */
+"file_not_found" = "File not found";
+"skill_not_found" = "Skill not found";
+
+/* Usage */
+"usage_placeholder" = "Token stats by staff / model / worktree / day·month — plan P4. Merge traffic attributes to the resolved model.";
+
+/* Settings */
+"holding_path" = "Holding path";
+"holding_path_help" = "Recommended SoT: ~/Documents/Agents/agents-holding (avoid ~/.agents — separate sqlite inventory). Env: AGENTS_HOLDING_PATH.";
+"active_path" = "Active: %@";
+"use_documents_holding" = "Use Documents/Agents/agents-holding";
+"apply_reload" = "Apply & reload";
+
+/* Add company */
+"add_company_title" = "Add company";
+"step_folder" = "1 · Folder & slug";
+"step_roster" = "2 · Staffs — tap a staff for skills / access / description";
+"step_confirm" = "3 · Confirm";
+"folder_help" = "Choose a project folder. The app detects automatically: existing `.agents/*-company` → register; otherwise → create-company.";
+"folder_not_chosen" = "No folder selected";
+"company_name_slug" = "Company name (slug)";
+"budget" = "Budget";
+"mode_register" = "Detected: existing %@ → register + apply roster.";
+"mode_create" = "Detected: no Company OS yet → create-company + apply roster.";
+"roster_help" = "Leading-aligned staff list. Tap a row for skills (library), access (browse), description. New staff: skills attach to that staff.";
+"add_staff" = "Add staff";
+"recommended_set" = "Recommended set";
+"add_staff_title" = "Add staff";
+"tab_existing" = "Existing";
+"tab_custom" = "Custom staff";
+"existing_help" = "Pick a staff from the template catalog — no description needed (from catalog). You can attach skills/access after adding.";
+"existing_all_added" = "Every template staff is already in the roster.";
+"custom_help" = "Custom staff — description required. Skills/access for this staff are set in the editor next.";
+"name_slug" = "name (slug)";
+"team_field" = "team";
+"description" = "Description";
+"add_custom" = "Add custom";
+"new_staff_badge" = "new";
+"skills_count" = "%d skills";
+"paths_count" = "%d paths";
+"mode_auto_register" = "Auto: register existing Company OS";
+"mode_auto_create" = "Auto: create-company";
+"staffs_label" = "Staffs";
+"folder_label" = "Folder";
+"slug_label" = "Slug";
+"budget_label" = "Budget";
+"mode_label" = "Mode";
+"holding_path_missing" = "Holding path missing";
+
+/* Staff editor */
+"new_staff_editor_hint" = "New staff — skills/access attach to this staff";
+"template_staff" = "Template staff";
+"description_required_custom" = "Required for custom staff.";
+"template_description_readonly" = "Template staff — description from catalog (no need to re-enter).";
+"access_files" = "Access (files/folders)";
+"access_help" = "Browse to allow paths this staff may work on.";
+"browse_allow" = "Browse allow…";
+"skills_library_staff" = "Skills (library → this staff)";
+"filter_placeholder" = "Filter…";
+
+/* Panels */
+"choose_folder_install" = "Choose a project folder to install / register a company";
+"choose" = "Choose";
+"choose_allow_paths" = "Choose files/folders this staff may work on (multi-select OK)";
+"allow" = "Allow";

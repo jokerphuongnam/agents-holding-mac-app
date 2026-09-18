@@ -35,12 +35,12 @@ struct CodeFileDetailView: View {
                 }
                 .navigationTitle(file.fileName)
             } else {
-                ContentUnavailableView("File not found", systemImage: "doc.questionmark")
+                ContentUnavailableView(L10n.tr("file_not_found"), systemImage: "doc.questionmark")
             }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Back") { appModel.backFromCodeFile() }
+                Button(L10n.tr("back")) { appModel.backFromCodeFile() }
             }
         }
     }
