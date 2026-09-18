@@ -125,6 +125,12 @@
 "usage_chart_models" = "Model share (in range)";
 "usage_chart_timeline" = "Tokens by period (stacked by model)";
 "usage_col_model" = "Model";
+"usage_col_share" = "Share";
+"usage_table_by_model" = "By model (selected range)";
+"usage_table_by_model_help" = "Fits the date/worktree range — one row per model.";
+"usage_table_by_worktree" = "By worktree (selected range)";
+"usage_table_by_worktree_help" = "Shown when Worktree = All — compare worktrees in this range.";
+"usage_table_by_bucket_help" = "Fits the Bucket filter — one row per day/week/month/year.";
 
 /* Settings */
 "holding_path" = "Holding path";

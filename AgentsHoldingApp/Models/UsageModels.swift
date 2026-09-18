@@ -133,6 +133,8 @@ struct UsageReport: Hashable {
     var dataEnd: Date?
     var rangeTotal: UsagePeriodRow
     var buckets: [UsagePeriodRow]
+    /// Present when filter is "all worktrees" — one row per worktree in range.
+    var byWorktree: [UsagePeriodRow]
     var ledgerPaths: [URL]
 }
 

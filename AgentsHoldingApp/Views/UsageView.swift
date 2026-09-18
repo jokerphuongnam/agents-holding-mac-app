@@ -26,8 +26,12 @@ struct UsageView: View {
                     summaryCards(report)
                     modelShareChart(report)
                     timelineChart(report)
-                    periodTable(title: L10n.usageTableSummary, rows: [report.rangeTotal])
-                    periodTable(title: bucketTableTitle, rows: report.buckets)
+                    // Tables adapt to active filters (not one fixed layout for everything).
+                    modelBreakdownTable(report)
+                    if worktreeSelection.isEmpty, !report.byWorktree.isEmpty {
+                        worktreeTable(report.byWorktree)
+                    }
+                    bucketTable(report.buckets)
                     ledgerFooter(report)
                 } else {
                     emptyState
@@ -238,10 +242,91 @@ struct UsageView: View {
         }
     }
 
-    private func periodTable(title: String, rows: [UsagePeriodRow]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+    /// Range filter → rows are models (share of selected range).
+    private func modelBreakdownTable(_ report: UsageReport) -> some View {
+        let total = max(report.rangeTotal.total, 1)
+        let rows = report.rangeTotal.byModel.filter { chartModels.contains($0.model) }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.usageTableByModel)
                 .font(.headline)
+            Text(L10n.usageTableByModelHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
+                GridRow {
+                    Text(L10n.usageColModel).fontWeight(.semibold)
+                    Text(L10n.usageColTotal).fontWeight(.semibold)
+                    Text(L10n.usageColShare).fontWeight(.semibold)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Divider().gridCellColumns(3)
+                ForEach(rows) { row in
+                    GridRow {
+                        Text(row.model)
+                        Text(row.tokens.formatted()).monospacedDigit()
+                        Text(shareString(row.tokens, of: total)).monospacedDigit()
+                    }
+                    .font(.callout)
+                }
+                Divider().gridCellColumns(3)
+                GridRow {
+                    Text(L10n.usageRangeTotal).fontWeight(.semibold)
+                    Text(report.rangeTotal.total.formatted()).fontWeight(.semibold).monospacedDigit()
+                    Text("100%").fontWeight(.semibold)
+                }
+                .font(.callout)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    /// Worktree filter = all → break down by worktree for the range.
+    private func worktreeTable(_ rows: [UsagePeriodRow]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.usageTableByWorktree)
+                .font(.headline)
+            Text(L10n.usageTableByWorktreeHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                GridRow {
+                    Text(L10n.usageWorktree).fontWeight(.semibold)
+                    Text(L10n.usageColTotal).fontWeight(.semibold)
+                    Text("grok").fontWeight(.semibold)
+                    Text("claude").fontWeight(.semibold)
+                    Text("codex").fontWeight(.semibold)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Divider().gridCellColumns(5)
+                ForEach(rows) { row in
+                    GridRow {
+                        Text(row.label)
+                        Text(row.total.formatted()).monospacedDigit()
+                        Text(token(row, "grok")).monospacedDigit()
+                        Text(token(row, "claude")).monospacedDigit()
+                        Text(token(row, "codex")).monospacedDigit()
+                    }
+                    .font(.callout)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    /// Bucket filter → periods as rows (day/week/month/year).
+    private func bucketTable(_ rows: [UsagePeriodRow]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(bucketTableTitle)
+                .font(.headline)
+            Text(L10n.usageTableByBucketHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if rows.isEmpty {
                 Text(L10n.usageNoRows)
                     .font(.caption)
@@ -274,6 +359,11 @@ struct UsageView: View {
                 .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
             }
         }
+    }
+
+    private func shareString(_ part: Int, of total: Int) -> String {
+        let pct = Double(part) / Double(max(total, 1)) * 100
+        return String(format: "%.1f%%", pct)
     }
 
     private var emptyState: some View {

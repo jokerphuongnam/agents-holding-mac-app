@@ -125,6 +125,12 @@
 "usage_chart_models" = "Tỷ lệ model (trong khoảng)";
 "usage_chart_timeline" = "Token theo kỳ (stacked theo model)";
 "usage_col_model" = "Model";
+"usage_col_share" = "Tỷ lệ";
+"usage_table_by_model" = "Theo model (khoảng đã chọn)";
+"usage_table_by_model_help" = "Khớp filter ngày/worktree — mỗi dòng một model.";
+"usage_table_by_worktree" = "Theo worktree (khoảng đã chọn)";
+"usage_table_by_worktree_help" = "Hiện khi Worktree = Tất cả — so sánh worktree trong khoảng.";
+"usage_table_by_bucket_help" = "Khớp filter Bucket — mỗi dòng một ngày/tuần/tháng/năm.";
 
 /* Settings */
 "holding_path" = "Đường dẫn holding";

@@ -70,6 +70,12 @@ struct UsageLedgerService {
 
         let rangeTotal = periodRow(label: "range", events: filtered)
         let buckets = bucketRows(events: filtered, bucket: query.bucket, calendar: cal)
+        let byWorktree: [UsagePeriodRow]
+        if query.worktree == nil || query.worktree?.isEmpty == true {
+            byWorktree = worktreeRows(events: filtered)
+        } else {
+            byWorktree = []
+        }
 
         return UsageReport(
             scopeLabel: scopeLabel,
@@ -80,8 +86,18 @@ struct UsageLedgerService {
             dataEnd: dataEnd,
             rangeTotal: rangeTotal,
             buckets: buckets,
+            byWorktree: byWorktree,
             ledgerPaths: ledgerPaths
         )
+    }
+
+    private func worktreeRows(events: [UsageEvent]) -> [UsagePeriodRow] {
+        var map: [String: [UsageEvent]] = [:]
+        for e in events {
+            let key = (e.worktree?.isEmpty == false) ? (e.worktree ?? "") : "(none)"
+            map[key, default: []].append(e)
+        }
+        return map.keys.sorted().map { periodRow(label: $0, events: map[$0] ?? []) }
     }
 
     // MARK: - Bucketing
