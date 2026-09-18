@@ -1,4 +1,4 @@
-# agents-holding-app
+# agents-holding-mac-app
 
 macOS **SwiftUI** mission-control UI for [agents-holding](../agents-holding) (Paperclip-inspired org canvas + in-company CEO/BA chat + Usage).
 
@@ -21,7 +21,7 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 ## Setup
 
 ```bash
-cd ~/Documents/Agents/agents-holding-app
+cd ~/Documents/Agents/agents-holding-mac-app
 ./Scripts/generate.sh          # SPM-fetch SwiftGen + run it; XcodeGen → .xcodeproj
 open AgentsHoldingApp.xcodeproj
 # Xcode resolves app SPM on first open (MarkdownUI, HighlightSwift)
