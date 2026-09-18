@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     @Published var companyStack: [CompanyNode] = []
     @Published var staffDetail: StaffDetail?
     @Published var openSkill: SkillRef?
+    @Published var openCodeFile: CodeFileRef?
 
     /// When viewing holding staff, company OS root is the holding package.
     private var holdingPackageRoot: URL?
@@ -36,6 +37,7 @@ final class AppModel: ObservableObject {
             companyStack = []
             staffDetail = nil
             openSkill = nil
+            openCodeFile = nil
             selection = .holding
         } catch {
             holdingPath = nil
@@ -59,6 +61,7 @@ final class AppModel: ObservableObject {
             }
             staffDetail = nil
             openSkill = nil
+            openCodeFile = nil
             selection = .company(snap.node.id)
         } catch {
             lastError = error.localizedDescription
@@ -80,6 +83,7 @@ final class AppModel: ObservableObject {
         }
         staffDetail = detail
         openSkill = nil
+        openCodeFile = nil
         selection = .staff(staff.id)
     }
 
@@ -101,6 +105,7 @@ final class AppModel: ObservableObject {
             if let detail = staffDirectory.loadStaffDetail(name: name, team: team, companyRoot: root) {
                 staffDetail = detail
                 openSkill = nil
+                openCodeFile = nil
                 selection = .staff(detail.node.id)
                 return
             }
@@ -110,7 +115,14 @@ final class AppModel: ObservableObject {
 
     func openSkill(_ skill: SkillRef) {
         openSkill = skill
+        openCodeFile = nil
         selection = .skill(skill.skillID)
+    }
+
+    func openCodeFile(_ file: CodeFileRef) {
+        openCodeFile = file
+        openSkill = nil
+        selection = .codeFile(file.id)
     }
 
     func backToHolding() {
@@ -118,12 +130,14 @@ final class AppModel: ObservableObject {
         companyStack = []
         staffDetail = nil
         openSkill = nil
+        openCodeFile = nil
         selection = .holding
     }
 
     func backOneCompany() {
         staffDetail = nil
         openSkill = nil
+        openCodeFile = nil
         guard companyStack.count > 1 else {
             backToHolding()
             return
@@ -136,6 +150,7 @@ final class AppModel: ObservableObject {
 
     func backFromStaff() {
         openSkill = nil
+        openCodeFile = nil
         staffDetail = nil
         if let company = openCompany?.node {
             selection = .company(company.id)
@@ -148,8 +163,19 @@ final class AppModel: ObservableObject {
         openSkill = nil
         if let staff = staffDetail {
             selection = .staff(staff.node.id)
+        } else if let company = openCompany?.node {
+            selection = .company(company.id)
         } else {
-            backFromStaff()
+            selection = .holding
+        }
+    }
+
+    func backFromCodeFile() {
+        openCodeFile = nil
+        if let company = openCompany?.node {
+            selection = .company(company.id)
+        } else {
+            selection = .holding
         }
     }
 
@@ -170,5 +196,6 @@ enum NavigationSelection: Hashable {
     case company(String)
     case staff(String)
     case skill(String)
+    case codeFile(String)
     case usage
 }

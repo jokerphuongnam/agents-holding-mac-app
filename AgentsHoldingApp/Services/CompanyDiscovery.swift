@@ -4,21 +4,36 @@ import Foundation
 struct CompanyDiscovery {
     private let holdingDiscovery = HoldingDiscovery()
     private let staffDirectory = StaffDirectory()
+    private let assets = CompanyAssetsDiscovery()
 
     func loadCompany(from node: CompanyNode, holdingRoot: URL?) throws -> CompanySnapshot {
         guard let companyPath = resolveCompanyPath(node) else {
-            return CompanySnapshot(node: node, children: [], teams: [], companyRoot: node.companyPath ?? node.projectRoot ?? URL(fileURLWithPath: "/"))
+            return CompanySnapshot(
+                node: node,
+                children: [],
+                teams: [],
+                companyRoot: node.companyPath ?? node.projectRoot ?? URL(fileURLWithPath: "/")
+            )
         }
 
         let children = loadChildren(parentCompanyPath: companyPath, holdingRoot: holdingRoot)
         let teams = staffDirectory.loadTeams(companyRoot: companyPath)
+        let skills = assets.loadSkills(companyRoot: companyPath)
+        let scripts = assets.loadScripts(companyRoot: companyPath)
 
         var enriched = node
         if enriched.companyPath == nil {
             enriched.companyPath = companyPath
         }
 
-        return CompanySnapshot(node: enriched, children: children, teams: teams, companyRoot: companyPath)
+        return CompanySnapshot(
+            node: enriched,
+            children: children,
+            teams: teams,
+            companyRoot: companyPath,
+            skills: skills,
+            scripts: scripts
+        )
     }
 
     private func resolveCompanyPath(_ node: CompanyNode) -> URL? {

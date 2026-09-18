@@ -57,4 +57,6 @@ struct CompanySnapshot: Equatable {
     var children: [CompanyNode]
     var teams: [TeamNode]
     var companyRoot: URL
+    var skills: [CodeFileRef] = []
+    var scripts: [CodeFileRef] = []
 }

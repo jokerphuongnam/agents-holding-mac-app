@@ -22,6 +22,8 @@ struct RootView: View {
             StaffDetailView()
         case .skill:
             SkillDetailView()
+        case .codeFile:
+            CodeFileDetailView()
         case .usage:
             UsagePlaceholderView()
         }

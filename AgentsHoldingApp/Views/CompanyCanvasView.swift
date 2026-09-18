@@ -13,6 +13,28 @@ struct CompanyCanvasView: View {
 
                         childrenSection(snap)
                         teamsSection(snap)
+                        FileListSection(
+                            title: "Skills (files)",
+                            systemImage: "book",
+                            files: snap.skills,
+                            emptyText: "No SKILL.md under system/skills"
+                        ) { file in
+                            appModel.openSkill(
+                                SkillRef(
+                                    skillID: file.path.deletingLastPathComponent().lastPathComponent,
+                                    title: file.fileName,
+                                    path: file.path
+                                )
+                            )
+                        }
+                        FileListSection(
+                            title: "Scripts (files)",
+                            systemImage: "terminal",
+                            files: snap.scripts,
+                            emptyText: "No scripts under system/"
+                        ) { file in
+                            appModel.openCodeFile(file)
+                        }
                     }
                     .padding(24)
                 }

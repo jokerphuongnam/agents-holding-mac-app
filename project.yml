@@ -12,6 +12,9 @@ packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     from: "2.4.1"
+  HighlightSwift:
+    url: https://github.com/appstefan/HighlightSwift
+    from: "1.1.0"
 targets:
   AgentsHoldingApp:
     type: application
@@ -21,6 +24,8 @@ targets:
     dependencies:
       - package: MarkdownUI
         product: MarkdownUI
+      - package: HighlightSwift
+        product: HighlightSwift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.agentsholding.app
