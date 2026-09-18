@@ -1,11 +1,8 @@
 import SwiftUI
 
 /// Staffs org graph — top is senior, below are reports.
-/// T-routes **without arrowheads**, drawn to card anchors.
-///
-/// Teams with many leaf staffs (desk-garden game-lead ×5, backend ×4):
-/// split into **left | center spine | right** columns so a horizontal bar
-/// never runs through a middle card.
+/// Connectors **stop at card edges** (never run through a card body).
+/// Large leaf teams: left/right stacks + center gutter spine.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
@@ -43,21 +40,21 @@ struct StaffsTreeView: View {
     }
 }
 
-// MARK: - Layout (desk-garden tuned)
+// MARK: - Layout
 
 private enum OrgLayout {
     static let cardWidth: CGFloat = 140
     static let siblingGap: CGFloat = 24
-    /// Gutter between left/right stacks — center spine lives here.
-    static let centerGutter: CGFloat = 40
-    static let stackGap: CGFloat = 12
-    /// ≥ this many leaf members → left/right split (avoids bar-through-card).
+    /// Wide gutter so the center spine cannot sit on a card.
+    static let centerGutter: CGFloat = 48
+    static let stackGap: CGFloat = 14
     static let splitThreshold: Int = 4
-    static let stem: CGFloat = 16
-    static let drop: CGFloat = 16
-    static let stub: CGFloat = 10
+    static let stem: CGFloat = 18
+    static let drop: CGFloat = 14
     static let lineWidth: CGFloat = 2
     static let lineColor = Color.secondary.opacity(0.6)
+    /// Keep strokes slightly outside the rounded rect.
+    static let edgePad: CGFloat = 1
     static var connectorReserve: CGFloat { stem + drop }
 }
 
@@ -65,11 +62,9 @@ private enum OrgChartSpace {
     static let name = "orgChart"
 }
 
-private enum OrgFanStyle {
-    /// One horizontal T above siblings (few children / branch leads).
+private enum OrgFanStyle: Equatable {
     case fan
-    /// Two stacks + center spine (many leaf staffs on one team).
-    case splitSides
+    case splitSides(leftIds: [String], rightIds: [String])
 }
 
 private struct CardFrameKey: PreferenceKey {
@@ -91,7 +86,11 @@ private struct OrgNodeView: View {
         guard !kids.isEmpty else { return .fan }
         let allLeaves = kids.allSatisfy { $0.children.isEmpty }
         if allLeaves, kids.count >= OrgLayout.splitThreshold {
-            return .splitSides
+            let mid = (kids.count + 1) / 2
+            return .splitSides(
+                leftIds: kids.prefix(mid).map(\.staff.id),
+                rightIds: kids.suffix(kids.count - mid).map(\.staff.id)
+            )
         }
         return .fan
     }
@@ -112,8 +111,8 @@ private struct OrgNodeView: View {
                 let origin = geo.frame(in: .named(OrgChartSpace.name)).origin
                 OrgConnectorCanvas(
                     parentId: node.staff.id,
-                    childIds: node.children.map(\.staff.id),
                     style: fanStyle,
+                    directChildIds: node.children.map(\.staff.id),
                     frames: frames,
                     origin: origin
                 )
@@ -139,19 +138,21 @@ private struct OrgNodeView: View {
                     OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
                 }
             }
-        case .splitSides:
-            let mid = (children.count + 1) / 2
-            let left = Array(children.prefix(mid))
-            let right = Array(children.suffix(children.count - mid))
+        case .splitSides(let leftIds, let rightIds):
+            let byId = Dictionary(uniqueKeysWithValues: children.map { ($0.staff.id, $0) })
             HStack(alignment: .top, spacing: OrgLayout.centerGutter) {
                 VStack(spacing: OrgLayout.stackGap) {
-                    ForEach(left) { child in
-                        OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                    ForEach(leftIds, id: \.self) { id in
+                        if let child = byId[id] {
+                            OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                        }
                     }
                 }
                 VStack(spacing: OrgLayout.stackGap) {
-                    ForEach(right) { child in
-                        OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                    ForEach(rightIds, id: \.self) { id in
+                        if let child = byId[id] {
+                            OrgNodeView(node: child, depth: depth + 1, onSelect: onSelect)
+                        }
                     }
                 }
             }
@@ -211,20 +212,18 @@ private struct OrgNodeView: View {
     }
 }
 
-// MARK: - Connectors
+// MARK: - Connectors (edge-only; never through card interiors)
 
 private struct OrgConnectorCanvas: View {
     let parentId: String
-    let childIds: [String]
     let style: OrgFanStyle
+    let directChildIds: [String]
     let frames: [String: CGRect]
     let origin: CGPoint
 
     var body: some View {
         Canvas { context, _ in
             guard let parentGlobal = frames[parentId] else { return }
-            let kidsGlobal = childIds.compactMap { frames[$0] }
-            guard !kidsGlobal.isEmpty else { return }
 
             func local(_ r: CGRect) -> CGRect {
                 CGRect(
@@ -236,15 +235,24 @@ private struct OrgConnectorCanvas: View {
             }
 
             let parent = local(parentGlobal)
-            let kids = kidsGlobal.map(local)
-            let parentBottom = CGPoint(x: parent.midX, y: parent.maxY)
+            let parentBottom = CGPoint(x: parent.midX, y: parent.maxY + OrgLayout.edgePad)
+
+            // Direct children only — never route using grandchild frames.
+            let direct: [(id: String, rect: CGRect)] = directChildIds.compactMap { id in
+                frames[id].map { (id, local($0)) }
+            }
+            guard !direct.isEmpty else { return }
 
             var path = Path()
             switch style {
             case .fan:
-                drawFan(path: &path, parentBottom: parentBottom, kids: kids)
-            case .splitSides:
-                drawSplitSides(path: &path, parentBottom: parentBottom, kids: kids)
+                drawFan(path: &path, parentBottom: parentBottom, kids: direct.map(\.rect))
+            case .splitSides(let leftIds, let rightIds):
+                let left = leftIds.compactMap { id in direct.first { $0.id == id }?.rect }
+                    .sorted { $0.minY < $1.minY }
+                let right = rightIds.compactMap { id in direct.first { $0.id == id }?.rect }
+                    .sorted { $0.minY < $1.minY }
+                drawSplitSides(path: &path, parentBottom: parentBottom, left: left, right: right)
             }
 
             context.stroke(
@@ -260,7 +268,7 @@ private struct OrgConnectorCanvas: View {
         .allowsHitTesting(false)
     }
 
-    /// Classic T above a single row — bar stays above cards, never through them.
+    /// T above a row — drops stop at the **top edge** of each card.
     private func drawFan(path: inout Path, parentBottom: CGPoint, kids: [CGRect]) {
         let row = kids.sorted { $0.midX < $1.midX }
         guard let left = row.first, let right = row.last else { return }
@@ -280,69 +288,60 @@ private struct OrgConnectorCanvas: View {
         }
 
         for kid in row {
+            let top = kid.minY - OrgLayout.edgePad
             path.move(to: CGPoint(x: kid.midX, y: y))
-            path.addLine(to: CGPoint(x: kid.midX, y: kid.minY))
+            path.addLine(to: CGPoint(x: kid.midX, y: top))
         }
     }
 
-    /// Center stem → split left/right. Buses live in the gutter; stubs into cards.
-    /// No line runs through a middle staff card.
-    private func drawSplitSides(path: inout Path, parentBottom: CGPoint, kids: [CGRect]) {
-        let left = kids.filter { $0.midX <= parentBottom.x }.sorted { $0.minY < $1.minY }
-        let right = kids.filter { $0.midX > parentBottom.x }.sorted { $0.minY < $1.minY }
+    /// Center spine in the gutter; stubs end on each card’s **near edge** only.
+    private func drawSplitSides(
+        path: inout Path,
+        parentBottom: CGPoint,
+        left: [CGRect],
+        right: [CGRect]
+    ) {
         guard !left.isEmpty || !right.isEmpty else { return }
 
-        let topY = (kids.map(\.minY).min() ?? 0) - OrgLayout.drop
+        let topY = ((left + right).map(\.minY).min() ?? 0) - OrgLayout.drop
 
-        // Stem down the center.
+        // Gutter bounds from column boxes — spine stays strictly between them.
+        let leftEdge = left.map(\.maxX).max() ?? parentBottom.x
+        let rightEdge = right.map(\.minX).min() ?? parentBottom.x
+        let spineX: CGFloat = {
+            if !left.isEmpty, !right.isEmpty {
+                return (leftEdge + rightEdge) / 2
+            }
+            return parentBottom.x
+        }()
+
+        let lowestMidY = (left + right).map(\.midY).max() ?? topY
+
+        // Stem → spine head (may jog into gutter center).
         path.move(to: parentBottom)
         path.addLine(to: CGPoint(x: parentBottom.x, y: topY))
-
-        // Buses sit in the center gutter (outside card boxes).
-        let leftBusX: CGFloat = {
-            guard !left.isEmpty else { return parentBottom.x }
-            return (left.map(\.maxX).max() ?? parentBottom.x) + OrgLayout.stub
-        }()
-        let rightBusX: CGFloat = {
-            guard !right.isEmpty else { return parentBottom.x }
-            return (right.map(\.minX).min() ?? parentBottom.x) - OrgLayout.stub
-        }()
-
-        // Short center bar: left bus ← center → right bus (only through gutter).
-        if !left.isEmpty {
-            path.move(to: CGPoint(x: parentBottom.x, y: topY))
-            path.addLine(to: CGPoint(x: leftBusX, y: topY))
-        }
-        if !right.isEmpty {
-            path.move(to: CGPoint(x: parentBottom.x, y: topY))
-            path.addLine(to: CGPoint(x: rightBusX, y: topY))
+        if abs(parentBottom.x - spineX) > 0.5 {
+            path.addLine(to: CGPoint(x: spineX, y: topY))
         }
 
-        drawSideBus(path: &path, busX: leftBusX, cards: left, topY: topY)
-        drawSideBus(path: &path, busX: rightBusX, cards: right, topY: topY)
-    }
+        // Vertical spine only in the gutter.
+        path.move(to: CGPoint(x: spineX, y: topY))
+        path.addLine(to: CGPoint(x: spineX, y: lowestMidY))
 
-    private func drawSideBus(
-        path: inout Path,
-        busX: CGFloat,
-        cards: [CGRect],
-        topY: CGFloat
-    ) {
-        guard let first = cards.first, let last = cards.last else { return }
+        // Left stack: stubs stop at card.maxX (never enter interior).
+        for card in left {
+            let y = card.midY
+            let edgeX = card.maxX + OrgLayout.edgePad
+            path.move(to: CGPoint(x: spineX, y: y))
+            path.addLine(to: CGPoint(x: edgeX, y: y))
+        }
 
-        // Vertical bus in the gutter (never through a card).
-        path.move(to: CGPoint(x: busX, y: topY))
-        path.addLine(to: CGPoint(x: busX, y: last.midY))
-
-        // First card: drop from bar onto card top.
-        path.move(to: CGPoint(x: busX, y: topY))
-        path.addLine(to: CGPoint(x: first.midX, y: topY))
-        path.addLine(to: CGPoint(x: first.midX, y: first.minY))
-
-        // Remaining cards: horizontal stubs from gutter bus into card center.
-        for card in cards.dropFirst() {
-            path.move(to: CGPoint(x: busX, y: card.midY))
-            path.addLine(to: CGPoint(x: card.midX, y: card.midY))
+        // Right stack: stubs stop at card.minX.
+        for card in right {
+            let y = card.midY
+            let edgeX = card.minX - OrgLayout.edgePad
+            path.move(to: CGPoint(x: spineX, y: y))
+            path.addLine(to: CGPoint(x: edgeX, y: y))
         }
     }
 }
