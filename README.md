@@ -73,3 +73,17 @@ Holding path resolution (first match wins):
 ## License
 
 Private — same org as [agents-holding](https://github.com/jokerphuongnam/agents-holding).
+
+## Demo company (real product + virtual usage)
+
+```bash
+# product
+cd ~/Documents/Agents/demo-analytics-lab
+PYTHONPATH=src python3 -m labkit.cli summary data/sample_events.csv
+
+# re-seed virtual hop usage
+python3 Scripts/seed-demo-usage.py \
+  --company-path ~/Documents/Agents/demo-analytics-lab/.agents/demo-analytics-lab-company
+```
+
+Then open **demo-analytics-lab** in the app → Usage.
