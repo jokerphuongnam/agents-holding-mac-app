@@ -13,9 +13,11 @@ final class AppModel: ObservableObject {
     @Published var staffDetail: StaffDetail?
     @Published var openSkill: SkillRef?
     @Published var openCodeFile: CodeFileRef?
+    /// Scope for Usage screen (holding / company+children / staff).
+    @Published var usageScope: UsageScope = .holdingAll
 
     /// When viewing holding staff, company OS root is the holding package.
-    private var holdingPackageRoot: URL?
+    private(set) var holdingPackageRoot: URL?
 
     private let holdingDiscovery = HoldingDiscovery()
     private let companyDiscovery = CompanyDiscovery()
@@ -38,6 +40,7 @@ final class AppModel: ObservableObject {
             staffDetail = nil
             openSkill = nil
             openCodeFile = nil
+            usageScope = .holdingAll
             selection = .holding
         } catch {
             holdingPath = nil
@@ -123,6 +126,59 @@ final class AppModel: ObservableObject {
         openCodeFile = file
         openSkill = nil
         selection = .codeFile(file.id)
+    }
+
+    func openUsageHolding() {
+        usageScope = .holdingAll
+        selection = .usage
+    }
+
+    func openUsageCompany() {
+        usageScope = .companySubtree
+        selection = .usage
+    }
+
+    func openUsageForStaff(_ name: String, inHolding: Bool) {
+        usageScope = .staff(name: name, inHolding: inHolding)
+        selection = .usage
+    }
+
+    /// Company OS roots for the current usage scope (parent + children when subtree).
+    func usageCompanyRoots() -> [(slug: String, root: URL)] {
+        switch usageScope {
+        case .holdingAll:
+            return allRegisteredCompanyRoots()
+        case .companySubtree:
+            guard let open = openCompany else { return [] }
+            return companySubtreeRoots(from: open)
+        case .staff(_, let inHolding):
+            if inHolding {
+                return allRegisteredCompanyRoots()
+            }
+            guard let open = openCompany else { return [] }
+            return companySubtreeRoots(from: open)
+        }
+    }
+
+    private func allRegisteredCompanyRoots() -> [(slug: String, root: URL)] {
+        guard let holding else { return [] }
+        var out: [(String, URL)] = []
+        for company in holding.companies {
+            if let snap = try? companyDiscovery.loadCompany(from: company, holdingRoot: holdingPath) {
+                out.append((snap.node.slug, snap.companyRoot))
+            }
+        }
+        return out
+    }
+
+    private func companySubtreeRoots(from snap: CompanySnapshot) -> [(slug: String, root: URL)] {
+        var out: [(String, URL)] = [(snap.node.slug, snap.companyRoot)]
+        for child in snap.children {
+            if let childSnap = try? companyDiscovery.loadCompany(from: child, holdingRoot: holdingPath) {
+                out.append(contentsOf: companySubtreeRoots(from: childSnap))
+            }
+        }
+        return out
     }
 
     func backToHolding() {

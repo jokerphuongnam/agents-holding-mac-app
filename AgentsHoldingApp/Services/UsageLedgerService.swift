@@ -15,29 +15,32 @@ struct UsageLedgerService {
 
     func loadRawEvents(
         holdingRoot: URL?,
-        companyRoot: URL?,
-        companySlug: String?
+        companies: [(slug: String, root: URL)],
+        staffName: String?
     ) -> (events: [UsageEvent], paths: [URL]) {
         var paths: [URL] = []
         var events: [UsageEvent] = []
 
         if let holdingRoot {
             let package = holdingPackage(from: holdingRoot)
-            paths.append(contentsOf: ledgerFiles(under: package.appendingPathComponent("cache/usage")))
-        }
-        if let companyRoot {
-            paths.append(contentsOf: ledgerFiles(under: companyRoot.appendingPathComponent("cache/usage")))
-        }
-
-        for path in paths {
-            events.append(contentsOf: loadFile(path, defaultCompany: companySlug))
-        }
-
-        if let companySlug {
-            events = events.filter { event in
-                guard let c = event.company, !c.isEmpty else { return true }
-                return c == companySlug || c == companySlug.replacingOccurrences(of: "-company", with: "")
+            let holdingUsage = package.appendingPathComponent("cache/usage")
+            let files = ledgerFiles(under: holdingUsage)
+            paths.append(contentsOf: files)
+            for path in files {
+                events.append(contentsOf: loadFile(path, defaultCompany: nil))
             }
+        }
+
+        for company in companies {
+            let files = ledgerFiles(under: company.root.appendingPathComponent("cache/usage"))
+            paths.append(contentsOf: files)
+            for path in files {
+                events.append(contentsOf: loadFile(path, defaultCompany: company.slug))
+            }
+        }
+
+        if let staffName, !staffName.isEmpty {
+            events = events.filter { ($0.staff ?? "") == staffName }
         }
 
         return (events, paths)

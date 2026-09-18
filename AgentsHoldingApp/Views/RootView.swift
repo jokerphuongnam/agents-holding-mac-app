@@ -52,7 +52,7 @@ struct SidebarView: View {
             }
             Section(L10n.navigate) {
                 Button(L10n.holding) { appModel.backToHolding() }
-                Button(L10n.usage) { appModel.selection = .usage }
+                Button(L10n.usage) { appModel.openUsageHolding() }
             }
             Section(L10n.actions) {
                 Text(L10n.addCompanyHint)

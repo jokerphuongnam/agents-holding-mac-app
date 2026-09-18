@@ -131,6 +131,13 @@
 "usage_table_by_worktree" = "Theo worktree (khoảng đã chọn)";
 "usage_table_by_worktree_help" = "Hiện khi Worktree = Tất cả — so sánh worktree trong khoảng.";
 "usage_table_by_bucket_help" = "Khớp filter Bucket — mỗi dòng một ngày/tuần/tháng/năm.";
+"usage_staff_button_help" = "Mở analytics cho staff này";
+"usage_company_button_help" = "Mở analytics cho company này và các company con";
+"usage_holding_button_help" = "Mở analytics cho mọi company trong holding";
+"usage_scope_holding_help" = "Phạm vi: mọi company đang có trong holding.";
+"usage_scope_company_help" = "Phạm vi: company này cộng các company con.";
+"usage_scope_staff_holding_help" = "Phạm vi: staff `%@` trên mọi company của holding.";
+"usage_scope_staff_company_help" = "Phạm vi: staff `%@` trong cây company này.";
 
 /* Settings */
 "holding_path" = "Đường dẫn holding";

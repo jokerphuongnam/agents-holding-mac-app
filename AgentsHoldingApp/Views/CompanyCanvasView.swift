@@ -46,19 +46,27 @@ struct CompanyCanvasView: View {
                     .padding(24)
                 }
                 .navigationTitle(snap.node.displayName)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(appModel.companyStack.count > 1 ? L10n.parent : L10n.holding) {
+                            appModel.backOneCompany()
+                        }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            appModel.openUsageCompany()
+                        } label: {
+                            Label(L10n.usage, systemImage: "chart.bar.xaxis")
+                        }
+                        .help(L10n.usageCompanyButtonHelp)
+                    }
+                }
             } else {
                 ContentUnavailableView(
                     L10n.noCompanyOpen,
                     systemImage: "building.2",
                     description: Text(L10n.pickCompanyHint)
                 )
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(appModel.companyStack.count > 1 ? L10n.parent : L10n.holding) {
-                    appModel.backOneCompany()
-                }
             }
         }
     }

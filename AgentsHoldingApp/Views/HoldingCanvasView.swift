@@ -32,7 +32,13 @@ struct HoldingCanvasView: View {
         }
         .navigationTitle(appModel.holding?.name ?? L10n.holding)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    appModel.openUsageHolding()
+                } label: {
+                    Label(L10n.usage, systemImage: "chart.bar.xaxis")
+                }
+                .help(L10n.usageHoldingButtonHelp)
                 Button {
                     showAddCompany = true
                 } label: {

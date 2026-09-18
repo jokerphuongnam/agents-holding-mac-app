@@ -4,7 +4,6 @@ import SwiftUI
 struct UsageView: View {
     @EnvironmentObject private var appModel: AppModel
 
-    @State private var scopeCompany = true
     @State private var worktreeSelection: String = "" // "" = all
     @State private var rangeStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var rangeEnd: Date = Date()
@@ -40,28 +39,55 @@ struct UsageView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .navigationTitle(L10n.usage)
+        .navigationTitle(usageTitle)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(L10n.reload) { reloadRaw() }
             }
         }
         .onAppear { reloadRaw() }
+        .onChange(of: appModel.usageScope) { _, _ in reloadRaw() }
         .onChange(of: appModel.openCompany?.node.id) { _, _ in reloadRaw() }
-        .onChange(of: scopeCompany) { _, _ in reloadRaw() }
         .onChange(of: worktreeSelection) { _, _ in reaggregate() }
         .onChange(of: rangeStart) { _, _ in reaggregate() }
         .onChange(of: rangeEnd) { _, _ in reaggregate() }
         .onChange(of: bucket) { _, _ in reaggregate() }
     }
 
+    private var usageTitle: String {
+        if let staff = appModel.usageScope.staffName {
+            return "\(L10n.usage) · \(staff)"
+        }
+        switch appModel.usageScope {
+        case .holdingAll: return "\(L10n.usage) · \(L10n.holding)"
+        case .companySubtree: return "\(L10n.usage) · \(appModel.openCompany?.node.displayName ?? L10n.companies)"
+        case .staff: return L10n.usage
+        }
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.usage)
+            Text(usageTitle)
                 .font(.title2.weight(.semibold))
+            Text(scopeHelpText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Text(L10n.usageHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var scopeHelpText: String {
+        switch appModel.usageScope {
+        case .holdingAll:
+            return L10n.usageScopeHoldingHelp
+        case .companySubtree:
+            return L10n.usageScopeCompanyHelp
+        case .staff(let name, let inHolding):
+            return inHolding
+                ? L10n.usageScopeStaffHoldingHelp(name)
+                : L10n.usageScopeStaffCompanyHelp(name)
         }
     }
 
@@ -70,24 +96,7 @@ struct UsageView: View {
             Text(L10n.usageFilters)
                 .font(.headline)
 
-            Picker(L10n.usageScope, selection: $scopeCompany) {
-                Text(L10n.usageScopeHolding).tag(false)
-                Text(L10n.usageScopeCompany).tag(true)
-            }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 420)
-
-            if scopeCompany {
-                if let company = appModel.openCompany?.node {
-                    Text(company.slug)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(L10n.usageOpenCompanyHint)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-            }
+            // Scope is set by where Analytics was opened (holding / company / staff).
 
             HStack(alignment: .firstTextBaseline, spacing: 16) {
                 DatePicker(L10n.usageFrom, selection: $rangeStart, displayedComponents: .date)
@@ -415,23 +424,20 @@ struct UsageView: View {
     }
 
     private func reloadRaw() {
-        let companyRoot = scopeCompany ? appModel.openCompany?.companyRoot : nil
-        let slug = scopeCompany ? appModel.openCompany?.node.slug : nil
+        let companies = appModel.usageCompanyRoots()
+        let includeHoldingLedger: URL? = {
+            switch appModel.usageScope {
+            case .holdingAll, .staff(_, true): return appModel.holdingPath
+            case .companySubtree, .staff(_, false): return nil
+            }
+        }()
         let loaded = ledger.loadRawEvents(
-            holdingRoot: appModel.holdingPath,
-            companyRoot: companyRoot,
-            companySlug: slug
+            holdingRoot: includeHoldingLedger,
+            companies: companies,
+            staffName: appModel.usageScope.staffName
         )
         rawEvents = loaded.events
         ledgerPaths = loaded.paths
-        if let min = loaded.events.map(\.timestamp).min(),
-           let max = loaded.events.map(\.timestamp).max(),
-           rangeStart == Calendar.current.date(byAdding: .day, value: -30, to: Date()) {
-            // keep user range unless still default-ish; still ok to leave
-            _ = min
-            _ = max
-        }
-        // Drop worktree filter if no longer present
         let wts = Set(loaded.events.compactMap(\.worktree).filter { !$0.isEmpty })
         if !worktreeSelection.isEmpty, !wts.contains(worktreeSelection) {
             worktreeSelection = ""
@@ -440,12 +446,18 @@ struct UsageView: View {
     }
 
     private func reaggregate() {
-        let slug = scopeCompany ? (appModel.openCompany?.node.slug ?? "company") : "holding"
+        let slug: String = {
+            switch appModel.usageScope {
+            case .holdingAll: return "holding"
+            case .companySubtree: return appModel.openCompany?.node.slug ?? "company"
+            case .staff(let name, _): return name
+            }
+        }()
         var start = rangeStart
         var end = rangeEnd
         if start > end { swap(&start, &end) }
         let query = UsageQuery(
-            scopeCompany: scopeCompany,
+            scopeCompany: true,
             worktree: worktreeSelection.isEmpty ? nil : worktreeSelection,
             rangeStart: start,
             rangeEnd: end,

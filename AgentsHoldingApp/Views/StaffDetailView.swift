@@ -44,13 +44,22 @@ struct StaffDetailView: View {
                 .sheet(item: $harnessProfiles) { profiles in
                     HarnessProfileSheet(profiles: profiles)
                 }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L10n.back) { appModel.backFromStaff() }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            let inHolding = appModel.openCompany == nil
+                            appModel.openUsageForStaff(detail.node.name, inHolding: inHolding)
+                        } label: {
+                            Label(L10n.usage, systemImage: "chart.bar.xaxis")
+                        }
+                        .help(L10n.usageStaffButtonHelp)
+                    }
+                }
             } else {
                 ContentUnavailableView(L10n.staffNotFound, systemImage: "person.slash")
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.back) { appModel.backFromStaff() }
             }
         }
     }
