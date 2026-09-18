@@ -125,6 +125,15 @@
 "usage_chart_models" = "Model share (in range)";
 "usage_chart_timeline" = "Tokens by period (stacked by model)";
 "usage_col_model" = "Model";
+"usage_chart" = "Chart";
+"usage_chart_help" = "Chart follows the same filters; pick a type that fits (donut/pie for share, bar/line for time).";
+"usage_chart_kind" = "Chart type";
+"usage_chart_donut" = "Donut";
+"usage_chart_pie" = "Pie";
+"usage_chart_bar" = "Bar";
+"usage_chart_line" = "Line";
+"usage_chart_table" = "Table";
+"usage_chart_table_hint" = "Table mode — use the data table below as the primary view.";
 "usage_col_share" = "Share";
 "usage_table_by_model" = "By model (selected range)";
 "usage_table_by_model_help" = "Fits the date/worktree range — one row per model.";

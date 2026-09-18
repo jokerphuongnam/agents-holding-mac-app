@@ -96,6 +96,17 @@ enum UsageBucket: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Chart presentation — switches with filters; only suitable kinds are offered.
+enum UsageChartKind: String, CaseIterable, Identifiable {
+    case donut // tròn
+    case pie // quạt
+    case bar
+    case line
+    case table
+
+    var id: String { rawValue }
+}
+
 /// "" = all models
 typealias UsageModelFilter = String
 

@@ -125,6 +125,15 @@
 "usage_chart_models" = "Tỷ lệ model (trong khoảng)";
 "usage_chart_timeline" = "Token theo kỳ (stacked theo model)";
 "usage_col_model" = "Model";
+"usage_chart" = "Chart";
+"usage_chart_help" = "Chart theo cùng filter; chọn loại phù hợp (tròn/quạt cho tỷ lệ, bar/line cho theo thời gian).";
+"usage_chart_kind" = "Loại chart";
+"usage_chart_donut" = "Tròn";
+"usage_chart_pie" = "Quạt";
+"usage_chart_bar" = "Bar";
+"usage_chart_line" = "Line";
+"usage_chart_table" = "Table";
+"usage_chart_table_hint" = "Chế độ table — dùng bảng dữ liệu bên dưới làm view chính.";
 "usage_col_share" = "Tỷ lệ";
 "usage_table_by_model" = "Theo model (khoảng đã chọn)";
 "usage_table_by_model_help" = "Khớp filter ngày/worktree — mỗi dòng một model.";

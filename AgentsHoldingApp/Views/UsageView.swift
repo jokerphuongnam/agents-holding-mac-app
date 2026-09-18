@@ -9,6 +9,7 @@ struct UsageView: View {
     @State private var rangeStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var rangeEnd: Date = Date()
     @State private var bucket: UsageBucket = .day
+    @State private var chartKind: UsageChartKind = .donut
 
     @State private var rawEvents: [UsageEvent] = []
     @State private var ledgerPaths: [URL] = []
@@ -24,7 +25,7 @@ struct UsageView: View {
                 filters
                 if let report, report.filteredCount > 0 || report.eventCount > 0 {
                     summaryCards(report)
-                    charts(report)
+                    chartSection(report)
                     dynamicTable(report.table)
                     ledgerFooter(report)
                 } else {
@@ -51,6 +52,8 @@ struct UsageView: View {
         .onChange(of: rangeStart) { _, _ in reaggregate() }
         .onChange(of: rangeEnd) { _, _ in reaggregate() }
         .onChange(of: bucket) { _, _ in reaggregate() }
+        .onChange(of: modelSelection) { _, _ in ensureChartKindFits() }
+        .onChange(of: worktreeSelection) { _, _ in ensureChartKindFits() }
     }
 
     private var usageTitle: String {
@@ -192,66 +195,160 @@ struct UsageView: View {
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Charts (follow same filters)
+    // MARK: - Charts (follow same filters; kind switches)
 
-    private func charts(_ report: UsageReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Model share — only when model filter is All (otherwise trivial)
+    private var availableChartKinds: [UsageChartKind] {
+        var kinds: [UsageChartKind] = [.bar, .line, .table]
+        // Round/fan charts need a categorical share breakdown
+        if modelSelection.isEmpty || worktreeSelection.isEmpty {
+            kinds.insert(.donut, at: 0)
+            kinds.insert(.pie, at: 1)
+        }
+        return kinds
+    }
+
+    private func ensureChartKindFits() {
+        let allowed = availableChartKinds
+        if !allowed.contains(chartKind) {
+            chartKind = allowed.first ?? .bar
+        }
+    }
+
+    private func chartSection(_ report: UsageReport) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.usageChart)
+                .font(.headline)
+            Text(L10n.usageChartHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker(L10n.usageChartKind, selection: $chartKind) {
+                ForEach(availableChartKinds) { kind in
+                    Text(chartKindTitle(kind)).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 520)
+
+            Group {
+                switch chartKind {
+                case .donut:
+                    shareChart(report, innerRatio: 0.48)
+                case .pie:
+                    shareChart(report, innerRatio: 0)
+                case .bar:
+                    timelineBarChart(report)
+                case .line:
+                    timelineLineChart(report)
+                case .table:
+                    Text(L10n.usageChartTableHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(12)
+            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+        }
+        .onAppear { ensureChartKindFits() }
+    }
+
+    private func chartKindTitle(_ kind: UsageChartKind) -> String {
+        switch kind {
+        case .donut: return L10n.usageChartDonut
+        case .pie: return L10n.usageChartPie
+        case .bar: return L10n.usageChartBar
+        case .line: return L10n.usageChartLine
+        case .table: return L10n.usageChartTable
+        }
+    }
+
+    /// Donut/pie from active share dimension (models if All models; else worktrees if All worktrees).
+    private func shareChart(_ report: UsageReport, innerRatio: CGFloat) -> some View {
+        let slices: [UsageModelBreakdown] = {
             if modelSelection.isEmpty {
-                let slices = chartModels.map {
+                return chartModels.map {
                     UsageModelBreakdown(model: $0, tokens: report.rangeByModel[$0] ?? 0)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.usageChartModels).font(.headline)
-                    Chart(slices) { slice in
-                        SectorMark(
-                            angle: .value(L10n.usageColTotal, max(slice.tokens, 0)),
-                            innerRadius: .ratio(0.45),
-                            angularInset: 1.5
-                        )
-                        .foregroundStyle(by: .value(L10n.usageColModel, slice.model))
-                        .cornerRadius(3)
-                    }
-                    .chartForegroundStyleScale([
-                        "grok": Color.orange,
-                        "claude": Color.purple,
-                        "codex": Color.blue,
-                    ])
-                    .frame(height: 200)
-                    .padding(12)
-                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+            }
+            // Single model + all worktrees → share by worktree using table rows
+            if worktreeSelection.isEmpty {
+                return report.table.rows.map {
+                    UsageModelBreakdown(
+                        model: $0.cells["worktree"] ?? $0.id,
+                        tokens: $0.numeric["total"] ?? 0
+                    )
                 }
             }
+            return [
+                UsageModelBreakdown(model: modelSelection, tokens: report.rangeTotal),
+            ]
+        }()
 
-            let points: [UsageChartPoint] = report.chartBuckets.flatMap { bucket in
-                let models = modelSelection.isEmpty ? chartModels : [modelSelection]
-                return models.map { model in
-                    UsageChartPoint(
-                        period: bucket.period,
-                        model: model,
-                        tokens: bucket.byModel[model] ?? 0
-                    )
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.usageChartTimeline).font(.headline)
-                Chart(points) { point in
-                    BarMark(
-                        x: .value(L10n.usageColPeriod, point.period),
-                        y: .value(L10n.usageColTotal, point.tokens)
-                    )
-                    .foregroundStyle(by: .value(L10n.usageColModel, point.model))
-                }
-                .chartForegroundStyleScale([
-                    "grok": Color.orange,
-                    "claude": Color.purple,
-                    "codex": Color.blue,
-                ])
-                .frame(height: 240)
-                .padding(12)
-                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+        let filtered = slices.filter { $0.tokens > 0 }
+        return Chart(filtered) { slice in
+            SectorMark(
+                angle: .value(L10n.usageColTotal, slice.tokens),
+                innerRadius: .ratio(innerRatio),
+                angularInset: innerRatio == 0 ? 0.8 : 1.5
+            )
+            .foregroundStyle(by: .value(L10n.usageColModel, slice.model))
+            .cornerRadius(innerRatio == 0 ? 0 : 3)
+        }
+        .applyModelColorScale(isModelShare: modelSelection.isEmpty)
+        .frame(height: 240)
+    }
+
+    private func timelinePoints(_ report: UsageReport) -> [UsageChartPoint] {
+        let models = modelSelection.isEmpty ? chartModels : [modelSelection]
+        return report.chartBuckets.flatMap { bucket in
+            models.map { model in
+                UsageChartPoint(
+                    period: bucket.period,
+                    model: model,
+                    tokens: bucket.byModel[model] ?? 0
+                )
             }
         }
+    }
+
+    private func timelineBarChart(_ report: UsageReport) -> some View {
+        Chart(timelinePoints(report)) { point in
+            BarMark(
+                x: .value(L10n.usageColPeriod, point.period),
+                y: .value(L10n.usageColTotal, point.tokens)
+            )
+            .foregroundStyle(by: .value(L10n.usageColModel, point.model))
+        }
+        .chartForegroundStyleScale([
+            "grok": Color.orange,
+            "claude": Color.purple,
+            "codex": Color.blue,
+        ])
+        .frame(height: 260)
+    }
+
+    private func timelineLineChart(_ report: UsageReport) -> some View {
+        Chart(timelinePoints(report)) { point in
+            LineMark(
+                x: .value(L10n.usageColPeriod, point.period),
+                y: .value(L10n.usageColTotal, point.tokens)
+            )
+            .foregroundStyle(by: .value(L10n.usageColModel, point.model))
+            .interpolationMethod(.catmullRom)
+            PointMark(
+                x: .value(L10n.usageColPeriod, point.period),
+                y: .value(L10n.usageColTotal, point.tokens)
+            )
+            .foregroundStyle(by: .value(L10n.usageColModel, point.model))
+        }
+        .chartForegroundStyleScale([
+            "grok": Color.orange,
+            "claude": Color.purple,
+            "codex": Color.blue,
+        ])
+        .frame(height: 260)
     }
 
     // MARK: - Single dynamic table
@@ -423,4 +520,19 @@ private struct UsageChartPoint: Identifiable {
     var period: String
     var model: String
     var tokens: Int
+}
+
+private extension View {
+    @ViewBuilder
+    func applyModelColorScale(isModelShare: Bool) -> some View {
+        if isModelShare {
+            self.chartForegroundStyleScale([
+                "grok": Color.orange,
+                "claude": Color.purple,
+                "codex": Color.blue,
+            ])
+        } else {
+            self
+        }
+    }
 }
