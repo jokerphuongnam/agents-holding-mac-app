@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct UsageView: View {
@@ -14,6 +15,7 @@ struct UsageView: View {
     @State private var report: UsageReport?
 
     private let ledger = UsageLedgerService()
+    private let chartModels = ["grok", "claude", "codex"]
 
     var body: some View {
         ScrollView {
@@ -22,6 +24,8 @@ struct UsageView: View {
                 filters
                 if let report, report.filteredCount > 0 || report.eventCount > 0 {
                     summaryCards(report)
+                    modelShareChart(report)
+                    timelineChart(report)
                     periodTable(title: L10n.usageTableSummary, rows: [report.rangeTotal])
                     periodTable(title: bucketTableTitle, rows: report.buckets)
                     ledgerFooter(report)
@@ -156,6 +160,82 @@ struct UsageView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Pie/sector share of models in the selected range.
+    private func modelShareChart(_ report: UsageReport) -> some View {
+        let slices = report.rangeTotal.byModel.filter { chartModels.contains($0.model) }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.usageChartModels)
+                .font(.headline)
+            if report.rangeTotal.total == 0 {
+                Text(L10n.usageNoRows)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Chart(slices) { slice in
+                    SectorMark(
+                        angle: .value(L10n.usageColTotal, slice.tokens),
+                        innerRadius: .ratio(0.45),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(by: .value(L10n.usageColModel, slice.model))
+                    .cornerRadius(3)
+                }
+                .chartForegroundStyleScale([
+                    "grok": Color.orange,
+                    "claude": Color.purple,
+                    "codex": Color.blue,
+                ])
+                .frame(height: 220)
+                .padding(12)
+                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    /// Stacked bars over buckets (day/week/month/year).
+    private func timelineChart(_ report: UsageReport) -> some View {
+        let points: [UsageChartPoint] = report.buckets.reversed().flatMap { row in
+            chartModels.map { model in
+                UsageChartPoint(
+                    period: displayPeriod(row.label),
+                    model: model,
+                    tokens: row.byModel.first { $0.model == model }?.tokens ?? 0
+                )
+            }
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.usageChartTimeline)
+                .font(.headline)
+            if report.buckets.isEmpty {
+                Text(L10n.usageNoRows)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Chart(points) { point in
+                    BarMark(
+                        x: .value(L10n.usageColPeriod, point.period),
+                        y: .value(L10n.usageColTotal, point.tokens)
+                    )
+                    .foregroundStyle(by: .value(L10n.usageColModel, point.model))
+                }
+                .chartForegroundStyleScale([
+                    "grok": Color.orange,
+                    "claude": Color.purple,
+                    "codex": Color.blue,
+                ])
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { _ in
+                        AxisGridLine()
+                        AxisValueLabel()
+                    }
+                }
+                .frame(height: 260)
+                .padding(12)
+                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
     }
 
     private func periodTable(title: String, rows: [UsagePeriodRow]) -> some View {
@@ -314,4 +394,11 @@ struct UsageView: View {
         if label == "range" { return L10n.usageRangeTotal }
         return label
     }
+}
+
+private struct UsageChartPoint: Identifiable {
+    var id: String { "\(period)|\(model)" }
+    var period: String
+    var model: String
+    var tokens: Int
 }

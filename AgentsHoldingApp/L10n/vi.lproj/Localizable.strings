@@ -122,6 +122,9 @@
 "usage_preset_90d" = "90 ngày";
 "usage_preset_all" = "Toàn bộ data";
 "usage_range_total" = "Trong khoảng";
+"usage_chart_models" = "Tỷ lệ model (trong khoảng)";
+"usage_chart_timeline" = "Token theo kỳ (stacked theo model)";
+"usage_col_model" = "Model";
 
 /* Settings */
 "holding_path" = "Đường dẫn holding";
