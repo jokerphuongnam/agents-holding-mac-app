@@ -17,17 +17,17 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# staff → preferred models (merge resolves to these vendors)
-STAFF_MODELS: dict[str, list[tuple[str, str]]] = {
-    # (model, launch_mode)
-    "ceo": [("grok", "grok"), ("grok", "merge")],
-    "cto": [("claude", "claude"), ("claude", "merge")],
-    "ba-lead": [("codex", "codex"), ("claude", "merge")],
-    "ba-user": [("claude", "claude"), ("claude", "merge"), ("grok", "merge")],
-    "po-lead": [("codex", "codex"), ("codex", "merge")],
-    "po-new": [("codex", "codex"), ("codex", "merge")],
-    "qc-lead": [("claude", "claude"), ("grok", "merge")],
-    "git": [("codex", "codex"), ("grok", "grok")],
+# staff → models (weighted). Keep roughly balanced across grok/claude/codex overall.
+# (model, launch_mode, weight)
+STAFF_MODELS: dict[str, list[tuple[str, str, int]]] = {
+    "ceo": [("grok", "grok", 3), ("claude", "merge", 1), ("codex", "merge", 1)],
+    "cto": [("claude", "claude", 3), ("grok", "merge", 1), ("codex", "merge", 1)],
+    "ba-lead": [("claude", "claude", 2), ("codex", "codex", 2), ("grok", "merge", 1)],
+    "ba-user": [("claude", "claude", 2), ("grok", "merge", 2), ("codex", "merge", 1)],
+    "po-lead": [("codex", "codex", 2), ("claude", "merge", 2), ("grok", "merge", 1)],
+    "po-new": [("codex", "codex", 2), ("claude", "claude", 2), ("grok", "merge", 1)],
+    "qc-lead": [("claude", "claude", 2), ("grok", "grok", 2), ("codex", "merge", 1)],
+    "git": [("grok", "grok", 2), ("codex", "codex", 2), ("claude", "merge", 1)],
 }
 
 WORKTREES = [
@@ -78,20 +78,24 @@ def main() -> int:
         sessions = rng.randint(2, 4) if weekend else rng.randint(6, 14)
         for _ in range(sessions):
             staff = rng.choice(staffs)
-            models = STAFF_MODELS.get(staff) or [("grok", "grok")]
-            model, launch = rng.choice(models)
+            choices = STAFF_MODELS.get(staff) or [("grok", "grok", 1)]
+            # weighted pick
+            bag: list[tuple[str, str]] = []
+            for model, launch, w in choices:
+                bag.extend([(model, launch)] * max(1, w))
+            model, launch = rng.choice(bag)
             worktree = rng.choice(WORKTREES)
-            # Token volume by role
+            # Token volume by role (keep po-* from dominating the pie)
             base = {
-                "ceo": (8_000, 25_000),
-                "ba-user": (5_000, 18_000),
-                "ba-lead": (3_000, 10_000),
-                "po-new": (10_000, 40_000),
-                "po-lead": (4_000, 12_000),
-                "cto": (6_000, 22_000),
-                "qc-lead": (4_000, 15_000),
-                "git": (1_000, 4_000),
-            }.get(staff, (2_000, 8_000))
+                "ceo": (8_000, 22_000),
+                "ba-user": (6_000, 18_000),
+                "ba-lead": (4_000, 12_000),
+                "po-new": (7_000, 20_000),
+                "po-lead": (5_000, 14_000),
+                "cto": (7_000, 20_000),
+                "qc-lead": (5_000, 15_000),
+                "git": (2_000, 6_000),
+            }.get(staff, (3_000, 10_000))
             total = rng.randint(*base)
             if weekend:
                 total = int(total * 0.45)
