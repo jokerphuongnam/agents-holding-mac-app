@@ -9,6 +9,15 @@ struct StaffsTreeView: View {
 
     private let viewportMaxHeight: CGFloat = 560
 
+    /// Prefer classic CEO roots when centering the viewport.
+    private var focusRootId: String? {
+        let ids = roots.map(\.staff.id)
+        if let ceo = ids.first(where: { $0 == "holding-ceo" || $0 == "ceo" }) {
+            return OrgScrollAnchor.card(ceo)
+        }
+        return roots.first.map { OrgScrollAnchor.card($0.staff.id) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(L10n.staffsTree, systemImage: "person.3")
@@ -22,22 +31,47 @@ struct StaffsTreeView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                    VStack(alignment: .center, spacing: 28) {
-                        ForEach(roots) { root in
-                            OrgNodeView(node: root, depth: 0, onSelect: onSelect)
+                ScrollViewReader { proxy in
+                    ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                        VStack(alignment: .center, spacing: 28) {
+                            ForEach(roots) { root in
+                                OrgNodeView(node: root, depth: 0, onSelect: onSelect)
+                            }
                         }
+                        .padding(16)
+                        .frame(minWidth: 320, alignment: .top)
+                        .coordinateSpace(name: OrgChartSpace.name)
                     }
-                    .padding(16)
-                    .frame(minWidth: 320, alignment: .top)
-                    .coordinateSpace(name: OrgChartSpace.name)
+                    .frame(maxWidth: .infinity, maxHeight: viewportMaxHeight, alignment: .topLeading)
+                    .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .onAppear {
+                        scrollCEOToCenter(proxy)
+                    }
+                    .onChange(of: focusRootId) { _, _ in
+                        scrollCEOToCenter(proxy)
+                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: viewportMaxHeight, alignment: .topLeading)
-                .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// Center the CEO card in the graph viewport (after layout settles).
+    private func scrollCEOToCenter(_ proxy: ScrollViewProxy) {
+        guard let id = focusRootId else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(id, anchor: .center)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                proxy.scrollTo(id, anchor: .center)
+            }
+        }
+    }
+}
+
+private enum OrgScrollAnchor {
+    static func card(_ staffId: String) -> String { "org-card-\(staffId)" }
 }
 
 // MARK: - Layout
@@ -98,6 +132,7 @@ private struct OrgNodeView: View {
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             staffCard(node.staff, emphasized: depth == 0)
+                .id(OrgScrollAnchor.card(node.staff.id))
                 .background(cardAnchor(node.staff.id))
 
             if !node.children.isEmpty {
