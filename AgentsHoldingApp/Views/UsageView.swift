@@ -14,9 +14,12 @@ struct UsageView: View {
     @State private var rawEvents: [UsageEvent] = []
     @State private var ledgerPaths: [URL] = []
     @State private var report: UsageReport?
+    /// 0 → 1; chart values animate from zero to target.
+    @State private var chartProgress: CGFloat = 0
 
     private let ledger = UsageLedgerService()
     @State private var availableModels: [String] = []
+    private let chartAnimation = Animation.easeOut(duration: 0.85)
 
     var body: some View {
         ScrollView {
@@ -54,6 +57,7 @@ struct UsageView: View {
         .onChange(of: bucket) { _, _ in reaggregate() }
         .onChange(of: modelSelection) { _, _ in ensureChartKindFits() }
         .onChange(of: worktreeSelection) { _, _ in ensureChartKindFits() }
+        .onChange(of: chartKind) { _, _ in replayChartAnimation() }
     }
 
     private var usageTitle: String {
@@ -249,8 +253,27 @@ struct UsageView: View {
             .frame(maxWidth: .infinity)
             .padding(12)
             .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+            .animation(chartAnimation, value: chartProgress)
+            .animation(chartAnimation, value: chartKind)
         }
-        .onAppear { ensureChartKindFits() }
+        .onAppear {
+            ensureChartKindFits()
+            replayChartAnimation()
+        }
+    }
+
+    private func replayChartAnimation() {
+        chartProgress = 0
+        // Next runloop so Charts sees the zero frame before animating up.
+        DispatchQueue.main.async {
+            withAnimation(chartAnimation) {
+                chartProgress = 1
+            }
+        }
+    }
+
+    private func animatedTokens(_ value: Int) -> Double {
+        Double(value) * Double(chartProgress)
     }
 
     private func chartKindTitle(_ kind: UsageChartKind) -> String {
@@ -289,7 +312,7 @@ struct UsageView: View {
         let filtered = slices.filter { $0.tokens > 0 }
         return Chart(filtered) { slice in
             SectorMark(
-                angle: .value(L10n.usageColTotal, slice.tokens),
+                angle: .value(L10n.usageColTotal, animatedTokens(slice.tokens)),
                 innerRadius: .ratio(innerRatio),
                 angularInset: innerRatio == 0 ? 0.8 : 1.5
             )
@@ -326,7 +349,7 @@ struct UsageView: View {
         return Chart(points) { point in
             BarMark(
                 x: .value(L10n.usageColPeriod, point.period),
-                y: .value(L10n.usageColTotal, point.tokens)
+                y: .value(L10n.usageColTotal, animatedTokens(point.tokens))
             )
             .foregroundStyle(by: .value(L10n.usageColModel, point.model))
         }
@@ -343,13 +366,13 @@ struct UsageView: View {
         return Chart(points) { point in
             LineMark(
                 x: .value(L10n.usageColPeriod, point.period),
-                y: .value(L10n.usageColTotal, point.tokens)
+                y: .value(L10n.usageColTotal, animatedTokens(point.tokens))
             )
             .foregroundStyle(by: .value(L10n.usageColModel, point.model))
             .interpolationMethod(.catmullRom)
             PointMark(
                 x: .value(L10n.usageColPeriod, point.period),
-                y: .value(L10n.usageColTotal, point.tokens)
+                y: .value(L10n.usageColTotal, animatedTokens(point.tokens))
             )
             .foregroundStyle(by: .value(L10n.usageColModel, point.model))
         }
@@ -512,6 +535,7 @@ struct UsageView: View {
             scopeLabel: slug,
             query: query
         )
+        replayChartAnimation()
     }
 
     private func applyPreset(days: Int) {
