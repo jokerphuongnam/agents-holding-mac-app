@@ -27,7 +27,7 @@ struct UsageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                filters
+                // Chart → Table → Filter (filters last so data is read first).
                 if let report, report.filteredCount > 0 || report.eventCount > 0 {
                     summaryCards(report)
                     chartSection(report)
@@ -36,6 +36,7 @@ struct UsageView: View {
                 } else {
                     emptyState
                 }
+                filters
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -115,48 +116,63 @@ struct UsageView: View {
             Text(L10n.usageFilters)
                 .font(.headline)
 
-            // Time range
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.usageFrom).font(.caption).foregroundStyle(.secondary)
-                    DatePicker("", selection: $rangeStart, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                Text("→").padding(.top, 16)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.usageTo).font(.caption).foregroundStyle(.secondary)
-                    DatePicker("", selection: $rangeEnd, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                Spacer()
+            // Bucket grain — large segment chips (day / week / month / year)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.usageBucket)
+                    .font(.subheadline.weight(.semibold))
+                bucketSegment
             }
 
-            // Bucket — one tap switches table row grain
-            Text(L10n.usageBucket).font(.caption).foregroundStyle(.secondary)
-            Picker("", selection: $bucket) {
-                Text(L10n.usageBucketDay).tag(UsageBucket.day)
-                Text(L10n.usageBucketWeek).tag(UsageBucket.week)
-                Text(L10n.usageBucketMonth).tag(UsageBucket.month)
-                Text(L10n.usageBucketYear).tag(UsageBucket.year)
+            // Time range + presets
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(L10n.usageFrom) → \(L10n.usageTo)")
+                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.usageFrom).font(.caption).foregroundStyle(.secondary)
+                        DatePicker("", selection: $rangeStart, displayedComponents: .date)
+                            .labelsHidden()
+                            .controlSize(.large)
+                    }
+                    Text("→").padding(.top, 16)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.usageTo).font(.caption).foregroundStyle(.secondary)
+                        DatePicker("", selection: $rangeEnd, displayedComponents: .date)
+                            .labelsHidden()
+                            .controlSize(.large)
+                    }
+                    Spacer(minLength: 8)
+                    HStack(spacing: 8) {
+                        Button(L10n.usagePreset7d) { applyPreset(days: 7) }
+                        Button(L10n.usagePreset30d) { applyPreset(days: 30) }
+                        Button(L10n.usagePreset90d) { applyPreset(days: 90) }
+                        Button(L10n.usagePresetAll) { applyAllDataRange() }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 480)
 
             // Worktree — All = sum across worktrees; one value filters models to that worktree
-            Picker(L10n.usageWorktree, selection: $worktreeSelection) {
-                Text(L10n.usageWorktreeAll).tag("")
-                ForEach(report?.availableWorktrees ?? distinctWorktrees(), id: \.self) { wt in
-                    Text(wt).tag(wt)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.usageWorktree)
+                    .font(.subheadline.weight(.semibold))
+                Picker("", selection: $worktreeSelection) {
+                    Text(L10n.usageWorktreeAll).tag("")
+                    ForEach(report?.availableWorktrees ?? distinctWorktrees(), id: \.self) { wt in
+                        Text(wt).tag(wt)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: 420, alignment: .leading)
             }
-            .frame(maxWidth: 420)
 
             // Models — multi-tick; rows = Sum + ticked models
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(L10n.usageColModel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline.weight(.semibold))
                     Spacer()
                     Button(L10n.usageModelSelectAll) {
                         selectedModels = Set(modelsInCurrentScope)
@@ -181,21 +197,51 @@ struct UsageView: View {
                 }
             }
 
-            HStack {
-                Button(L10n.usagePreset7d) { applyPreset(days: 7) }
-                Button(L10n.usagePreset30d) { applyPreset(days: 30) }
-                Button(L10n.usagePreset90d) { applyPreset(days: 90) }
-                Button(L10n.usagePresetAll) { applyAllDataRange() }
-            }
-            .buttonStyle(.borderless)
-
             Text(tableShapeHint)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// Big, readable Day / Week / Month / Year chips (segment-style).
+    private var bucketSegment: some View {
+        HStack(spacing: 0) {
+            ForEach(UsageBucket.allCases) { option in
+                let selected = bucket == option
+                Button {
+                    bucket = option
+                } label: {
+                    Text(bucketTitle(option))
+                        .font(.body.weight(selected ? .semibold : .regular))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(selected ? Color.accentColor : Color.primary)
+                        .background(selected ? Color.accentColor.opacity(0.18) : Color.clear)
+                }
+                .buttonStyle(.plain)
+                if option != UsageBucket.allCases.last {
+                    Divider().frame(height: 28)
+                }
+            }
+        }
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1)
+        )
+        .frame(maxWidth: 520)
+    }
+
+    private func bucketTitle(_ bucket: UsageBucket) -> String {
+        switch bucket {
+        case .day: return L10n.usageBucketDay
+        case .week: return L10n.usageBucketWeek
+        case .month: return L10n.usageBucketMonth
+        case .year: return L10n.usageBucketYear
+        }
     }
 
     /// Models that appear under current worktree + date range (before tick filter).
