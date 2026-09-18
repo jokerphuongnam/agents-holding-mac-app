@@ -143,3 +143,16 @@
 "choose" = "Choose";
 "choose_allow_paths" = "Choose files/folders this staff may work on (multi-select OK)";
 "allow" = "Allow";
+
+/* Harness / model profiles */
+"harness_profiles_title" = "Runtime profiles";
+"harness_profiles_subtitle" = "%@ · tier %@";
+"harness_profiles_help" = "For each launch mode: which model and effort this staff uses. Merge resolves vendor via runtime_router; staff SoT stays unchanged.";
+"harness_col_mode" = "Mode";
+"harness_col_runtime" = "Runtime";
+"harness_col_model" = "Model";
+"harness_col_effort" = "Effort";
+"harness_note_full_vendor" = "Full vendor session — model/effort from this harness × staff tier.";
+"harness_note_merge_off" = "Merge overlay off — uses default runtime `%@` (enable runtime_router to split).";
+"harness_note_merge_on" = "Merge overlay — staff mapped to `%@`; model/effort from that harness.";
+"harness_tier_help" = "Open model/effort by launch mode (grok, claude, codex, merge)";

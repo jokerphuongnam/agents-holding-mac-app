@@ -143,3 +143,16 @@
 "choose" = "Chọn";
 "choose_allow_paths" = "Chọn file/folder staff được phép làm việc (có thể chọn nhiều)";
 "allow" = "Cho phép";
+
+/* Harness / model profiles */
+"harness_profiles_title" = "Runtime profiles";
+"harness_profiles_subtitle" = "%@ · tier %@";
+"harness_profiles_help" = "Với từng mode launch: staff dùng model/effort nào. Merge resolve vendor qua runtime_router; staff SoT không đổi.";
+"harness_col_mode" = "Mode";
+"harness_col_runtime" = "Runtime";
+"harness_col_model" = "Model";
+"harness_col_effort" = "Effort";
+"harness_note_full_vendor" = "Session full vendor — model/effort từ harness này × tier staff.";
+"harness_note_merge_off" = "Merge overlay tắt — dùng default runtime `%@` (bật runtime_router để tách).";
+"harness_note_merge_on" = "Merge overlay — staff map sang `%@`; model/effort lấy từ harness đó.";
+"harness_tier_help" = "Xem model/effort theo mode (grok, claude, codex, merge)";

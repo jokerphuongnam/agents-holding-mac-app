@@ -26,6 +26,8 @@ targets:
     platform: macOS
     sources:
       - path: AgentsHoldingApp
+        excludes:
+          - Generated/**
     dependencies:
       - package: MarkdownUI
         product: MarkdownUI

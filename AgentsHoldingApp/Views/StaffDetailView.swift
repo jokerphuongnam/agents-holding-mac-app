@@ -3,6 +3,8 @@ import SwiftUI
 
 struct StaffDetailView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var showHarnessProfiles = false
+    @State private var harnessProfiles: StaffHarnessProfiles?
 
     var body: some View {
         Group {
@@ -40,6 +42,11 @@ struct StaffDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .navigationTitle(detail.node.name)
+                .sheet(isPresented: $showHarnessProfiles) {
+                    if let harnessProfiles {
+                        HarnessProfileSheet(profiles: harnessProfiles)
+                    }
+                }
             } else {
                 ContentUnavailableView(L10n.tr("staff_not_found"), systemImage: "person.slash")
             }
@@ -59,7 +66,26 @@ struct StaffDetailView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 if !detail.tier.isEmpty {
-                    badge(detail.tier)
+                    Button {
+                        harnessProfiles = HarnessProfileService().profiles(
+                            forStaff: detail.node.name,
+                            tier: detail.tier,
+                            companyRoot: detail.companyRoot
+                        )
+                        showHarnessProfiles = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(detail.tier)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.tr("harness_tier_help"))
                 }
                 if !detail.permissionMode.isEmpty {
                     badge(detail.permissionMode)

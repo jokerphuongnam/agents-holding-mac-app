@@ -1,0 +1,72 @@
+import SwiftUI
+
+struct HarnessProfileSheet: View {
+    let profiles: StaffHarnessProfiles
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.tr("harness_profiles_title"))
+                        .font(.title3.weight(.semibold))
+                    Text(L10n.tr("harness_profiles_subtitle", profiles.staffName, profiles.tier))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(L10n.tr("done")) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(L10n.tr("harness_profiles_help"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Header
+                    HStack {
+                        Text(L10n.tr("harness_col_mode")).frame(width: 72, alignment: .leading)
+                        Text(L10n.tr("harness_col_runtime")).frame(width: 72, alignment: .leading)
+                        Text(L10n.tr("harness_col_model")).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(L10n.tr("harness_col_effort")).frame(width: 72, alignment: .leading)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                    Divider()
+
+                    ForEach(profiles.modes) { row in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(row.mode)
+                                    .fontWeight(.semibold)
+                                    .frame(width: 72, alignment: .leading)
+                                Text(row.runtime)
+                                    .frame(width: 72, alignment: .leading)
+                                Text(row.model)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .textSelection(.enabled)
+                                Text(row.effort)
+                                    .frame(width: 72, alignment: .leading)
+                            }
+                            Text(row.note)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 6)
+                        Divider()
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .frame(width: 560, height: 420)
+    }
+}
