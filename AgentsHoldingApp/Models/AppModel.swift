@@ -143,6 +143,32 @@ final class AppModel: ObservableObject {
         selection = .usage
     }
 
+    /// Leave Usage and return to the screen that opened it.
+    func backFromUsage() {
+        switch usageScope {
+        case .staff(let name, let inHolding):
+            if let detail = staffDetail, detail.node.name == name {
+                selection = .staff(detail.node.id)
+            } else if let node = (inHolding ? holding?.teams : openCompany?.teams)?
+                .flatMap(\.staffs)
+                .first(where: { $0.name == name }) {
+                openStaff(node, inHolding: inHolding)
+            } else if let company = openCompany?.node, !inHolding {
+                selection = .company(company.id)
+            } else {
+                selection = .holding
+            }
+        case .companySubtree:
+            if let company = openCompany?.node {
+                selection = .company(company.id)
+            } else {
+                selection = .holding
+            }
+        case .holdingAll:
+            selection = .holding
+        }
+    }
+
     /// Company OS roots for the current usage scope (parent + children when subtree).
     func usageCompanyRoots() -> [(slug: String, root: URL)] {
         switch usageScope {

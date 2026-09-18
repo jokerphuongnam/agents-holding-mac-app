@@ -41,6 +41,9 @@ struct UsageView: View {
         }
         .navigationTitle(usageTitle)
         .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L10n.back) { appModel.backFromUsage() }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(L10n.reload) { reloadRaw() }
             }
