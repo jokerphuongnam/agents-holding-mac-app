@@ -314,7 +314,9 @@ struct UsageView: View {
     }
 
     private func timelineBarChart(_ report: UsageReport) -> some View {
-        Chart(timelinePoints(report)) { point in
+        let points = timelinePoints(report)
+        let periodCount = Set(points.map(\.period)).count
+        return Chart(points) { point in
             BarMark(
                 x: .value(L10n.usageColPeriod, point.period),
                 y: .value(L10n.usageColTotal, point.tokens)
@@ -326,11 +328,17 @@ struct UsageView: View {
             "claude": Color.purple,
             "codex": Color.blue,
         ])
-        .frame(height: 260)
+        .readableCategoryXAxis(periodCount: periodCount)
+        .chartScrollableAxes(periodCount > 10 ? .horizontal : [])
+        .chartXVisibleDomain(length: periodCount > 10 ? min(periodCount, 12) : periodCount)
+        .frame(height: 320)
+        .padding(.bottom, 8)
     }
 
     private func timelineLineChart(_ report: UsageReport) -> some View {
-        Chart(timelinePoints(report)) { point in
+        let points = timelinePoints(report)
+        let periodCount = Set(points.map(\.period)).count
+        return Chart(points) { point in
             LineMark(
                 x: .value(L10n.usageColPeriod, point.period),
                 y: .value(L10n.usageColTotal, point.tokens)
@@ -348,7 +356,11 @@ struct UsageView: View {
             "claude": Color.purple,
             "codex": Color.blue,
         ])
-        .frame(height: 260)
+        .readableCategoryXAxis(periodCount: periodCount)
+        .chartScrollableAxes(periodCount > 10 ? .horizontal : [])
+        .chartXVisibleDomain(length: periodCount > 10 ? min(periodCount, 12) : periodCount)
+        .frame(height: 320)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Single dynamic table
@@ -533,6 +545,30 @@ private extension View {
             ])
         } else {
             self
+        }
+    }
+
+    /// Rotate / thin X labels so period columns stay readable.
+    func readableCategoryXAxis(periodCount: Int) -> some View {
+        let desired = periodCount <= 8 ? periodCount : min(periodCount, 10)
+        return self.chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: max(desired, 1))) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let label = value.as(String.self) {
+                        Text(label)
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .rotationEffect(.degrees(-55), anchor: .topTrailing)
+                            .offset(x: -4, y: 10)
+                            .frame(width: 64, alignment: .trailing)
+                    }
+                }
+            }
+        }
+        .chartPlotStyle { plot in
+            plot.padding(.bottom, 36)
         }
     }
 }
