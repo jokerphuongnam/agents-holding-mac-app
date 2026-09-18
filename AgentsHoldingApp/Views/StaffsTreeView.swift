@@ -4,7 +4,7 @@ import SwiftUI
 /// Staffs org graph — top is senior, below are reports.
 /// Connectors **stop at card edges** (never run through a card body).
 /// Large leaf teams: left/right stacks + center gutter spine.
-/// Zoom: **Control + scroll wheel** (also trackpad pinch).
+/// Zoom: **⌘ + scroll wheel** zooms graph content only; ScrollView chrome stays fixed.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
@@ -62,16 +62,19 @@ struct StaffsTreeView: View {
                                 alignment: .topLeading
                             )
                     }
-                    .frame(maxWidth: .infinity, maxHeight: viewportMaxHeight, alignment: .topLeading)
+                    // Viewport stays fixed; only `graphContent` scales inside.
+                    .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight, alignment: .topLeading)
+                    .clipped()
                     .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .onHover { zoomState.isHovered = $0 }
                     .simultaneousGesture(pinchZoomGesture)
                     .onAppear {
-                        zoomState.installControlScrollMonitor()
+                        zoomState.installCommandScrollMonitor()
                         scrollCEOToCenter(proxy)
                     }
                     .onDisappear {
-                        zoomState.removeControlScrollMonitor()
+                        zoomState.removeCommandScrollMonitor()
                     }
                     .onChange(of: focusRootId) { _, _ in
                         scrollCEOToCenter(proxy)
@@ -172,7 +175,7 @@ struct StaffsTreeView: View {
     }
 }
 
-/// Reference-type zoom state so Control+scroll NSEvent monitor sees live hover/zoom.
+/// Reference-type zoom state so ⌘+scroll NSEvent monitor sees live hover/zoom.
 private final class OrgGraphZoomState: ObservableObject {
     @Published var zoom: CGFloat = 1.0
     var isHovered = false
@@ -212,10 +215,14 @@ private final class OrgGraphZoomState: ObservableObject {
         pinchBase = next
     }
 
-    func installControlScrollMonitor() {
-        removeControlScrollMonitor()
+    /// ⌘ + scroll zooms graph content. (⌃+scroll is macOS screen zoom — do not use.)
+    func installCommandScrollMonitor() {
+        removeCommandScrollMonitor()
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, self.isHovered, event.modifierFlags.contains(.control) else {
+            guard let self, self.isHovered else { return event }
+            // Require ⌘; ignore if ⌃ is also held (avoid fighting system zoom).
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard flags.contains(.command), !flags.contains(.control) else {
                 return event
             }
             let delta = event.scrollingDeltaY
@@ -231,7 +238,7 @@ private final class OrgGraphZoomState: ObservableObject {
         }
     }
 
-    func removeControlScrollMonitor() {
+    func removeCommandScrollMonitor() {
         if let scrollMonitor {
             NSEvent.removeMonitor(scrollMonitor)
             self.scrollMonitor = nil
@@ -239,7 +246,7 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     deinit {
-        removeControlScrollMonitor()
+        removeCommandScrollMonitor()
     }
 }
 
