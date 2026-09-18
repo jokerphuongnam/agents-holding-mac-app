@@ -1,21 +1,29 @@
 # agents-holding-mac-app
 
-macOS **SwiftUI** mission-control UI for [agents-holding](https://github.com/jokerphuongnam/agents-holding) (Paperclip-inspired org canvas + in-company CEO/BA chat + Usage).
+macOS **SwiftUI** mission-control UI for [agents-holding](https://github.com/jokerphuongnam/agents-holding) (org canvas + staff tree + Usage).
 
 Companion app for the holding Company OS — **not** inside the [agents-holding](https://github.com/jokerphuongnam/agents-holding) git tree.
 
-## Install (prebuilt DMG)
+## Install (one command)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 ```
 
-Downloads **`AgentsHolding-mac.dmg`** from the latest [GitHub Release](https://github.com/jokerphuongnam/agents-holding-mac-app/releases), installs the `.app` into `~/Applications`, and launches it — **no clone, no local build**.
+That single command:
+
+1. Downloads **`AgentsHolding-mac.dmg`** from the latest [GitHub Release](https://github.com/jokerphuongnam/agents-holding-mac-app/releases)
+2. Installs the `.app` into **`/Applications`**
+3. Opens the app
+
+No clone, no Xcode, no Homebrew. macOS may ask for an admin password to write `/Applications`.
+
+Optional flags:
 
 ```bash
-curl -fsSL …/install.sh | bash -s -- --tag v0.1.0
-curl -fsSL …/install.sh | bash -s -- --dir /Applications
-curl -fsSL …/install.sh | bash -s -- --no-open
+curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --tag v0.1.0
+curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --dir "$HOME/Applications"
+curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --no-open
 ```
 
 ### Publish a DMG (maintainers)
@@ -39,8 +47,8 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 ## Requirements
 
 - macOS 14+
-- **Only:** Swift / Xcode (no Homebrew for codegen)
-- Network once to resolve SPM (app + `BuildTools/`: SwiftGen, XcodeGen)
+- **Install path:** only `curl` + network (prebuilt DMG)
+- **From source:** Swift / Xcode (no Homebrew for codegen); SPM resolves once (`BuildTools/`: SwiftGen, XcodeGen)
 
 ## Setup (from a clone)
 
@@ -61,19 +69,6 @@ Holding path resolution (first match wins):
 3. Sibling checkout `../agents-holding` (local clone of [agents-holding](https://github.com/jokerphuongnam/agents-holding))
 4. `~/Documents/Agents/agents-holding`
 
-## P0 scaffold status
-
-- [x] macOS SwiftUI app target
-- [x] Discover holding + list staffs / child companies
-- [x] Navigate holding → staff detail / company placeholder / Usage placeholder
-- [ ] Paperclip-style graph layout + scale-up polish
-- [ ] Company canvas + CEO chat + BA handoff
-- [ ] Usage ledger screen
-
-## License
-
-Private — same org as [agents-holding](https://github.com/jokerphuongnam/agents-holding).
-
 ## Demo company (real product + virtual usage)
 
 ```bash
@@ -87,3 +82,7 @@ python3 Scripts/seed-demo-usage.py \
 ```
 
 Then open **demo-analytics-lab** in the app → Usage.
+
+## License
+
+Private — same org as [agents-holding](https://github.com/jokerphuongnam/agents-holding).

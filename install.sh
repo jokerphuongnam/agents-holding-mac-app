@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One-line install (recommended):
+# One-line install → /Applications:
 #   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 #
-# Downloads the prebuilt DMG from GitHub Releases and installs the .app —
-# no clone, no SwiftGen/XcodeGen, no local compile.
+# Downloads the prebuilt DMG from GitHub Releases and installs the .app into
+# /Applications (prompts for admin if needed) — no clone, no local compile.
 set -euo pipefail
 
 exec </dev/null
@@ -11,20 +11,20 @@ exec </dev/null
 REPO="${AGENTS_HOLDING_MAC_REPO:-jokerphuongnam/agents-holding-mac-app}"
 ASSET_NAME="${AGENTS_HOLDING_MAC_DMG:-AgentsHolding-mac.dmg}"
 TAG="${AGENTS_HOLDING_MAC_TAG:-latest}" # latest | v0.1.0
-INSTALL_DIR="${AGENTS_HOLDING_MAC_APP_DIR:-$HOME/Applications}"
+INSTALL_DIR="${AGENTS_HOLDING_MAC_APP_DIR:-/Applications}"
 OPEN_APP=1
 KEEP_DMG=0
 
 usage() {
   cat <<'USAGE'
-Install prebuilt Agents Holding macOS app from GitHub Releases.
+Install prebuilt Agents Holding macOS app from GitHub Releases into /Applications.
 
   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 
 Options (bash -s):
   --tag v0.1.0          Release tag (default: latest)
   --asset NAME.dmg      Asset filename (default: AgentsHolding-mac.dmg)
-  --dir ~/Applications  Install directory (default: ~/Applications)
+  --dir /Applications   Install directory (default: /Applications)
   --no-open             Do not launch the app after install
   --keep-dmg            Keep downloaded DMG in ~/Downloads
 USAGE
@@ -128,11 +128,28 @@ if [[ -z "$APP_SRC" ]]; then
 fi
 APP_NAME="$(basename "$APP_SRC")"
 
-mkdir -p "$INSTALL_DIR"
 DEST_APP="$INSTALL_DIR/$APP_NAME"
 echo "[install] installing → $DEST_APP"
-rm -rf "$DEST_APP"
-ditto "$APP_SRC" "$DEST_APP"
+
+run_priv() {
+  # Use sudo only when the install dir is not writable (typical for /Applications).
+  if [[ -d "$INSTALL_DIR" && -w "$INSTALL_DIR" ]] || mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+    if [[ -w "$INSTALL_DIR" ]]; then
+      "$@"
+      return
+    fi
+  fi
+  echo "[install] admin password required to write $INSTALL_DIR"
+  sudo "$@"
+}
+
+run_priv mkdir -p "$INSTALL_DIR"
+run_priv rm -rf "$DEST_APP"
+run_priv ditto "$APP_SRC" "$DEST_APP"
+# Clear quarantine so Gatekeeper does not block first launch of a curl-installed app.
+if command -v xattr >/dev/null 2>&1; then
+  run_priv xattr -cr "$DEST_APP" 2>/dev/null || true
+fi
 
 hdiutil detach "$MOUNT_POINT" -quiet || true
 MOUNT_POINT=""
