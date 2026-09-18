@@ -11,7 +11,8 @@ struct HarnessModeProfile: Identifiable, Hashable {
     var note: String
 }
 
-struct StaffHarnessProfiles: Hashable {
+struct StaffHarnessProfiles: Identifiable, Hashable {
+    var id: String { "\(staffName)|\(tier)" }
     var staffName: String
     var tier: String
     var modes: [HarnessModeProfile]

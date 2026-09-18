@@ -21,10 +21,13 @@ See [`docs/plans/company-os-mission-control-ui.md`](docs/plans/company-os-missio
 
 ```bash
 cd ~/Documents/Agents/agents-holding-app
-xcodegen generate
+./Scripts/generate.sh          # SwiftGen + XcodeGen
 open AgentsHoldingApp.xcodeproj
 # Xcode → File → Packages → Resolve Package Versions (if needed)
 ```
+
+Xcode **Run** also runs `Scripts/generate.sh` (SwiftGen only) as a pre-build phase.
+Generated files live in `AgentsHoldingApp/Generated/` (gitignored).
 
 Holding path resolution (first match wins):
 

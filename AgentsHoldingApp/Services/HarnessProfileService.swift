@@ -26,7 +26,7 @@ struct HarnessProfileService {
                         runtime: mode,
                         model: model.isEmpty ? "—" : model,
                         effort: effort.isEmpty ? "—" : effort,
-                        note: L10n.tr("harness_note_full_vendor")
+                        note: L10n.harnessNoteFullVendor
                     )
                 )
             }
@@ -48,7 +48,7 @@ struct HarnessProfileService {
                 runtime: fallback,
                 model: model.isEmpty ? "—" : model,
                 effort: effort.isEmpty ? "—" : effort,
-                note: L10n.tr("harness_note_merge_off", fallback)
+                note: L10n.harnessNoteMergeOff(fallback)
             )
         }
         let runtime = matchRuntime(staff: staff, router: router)
@@ -58,13 +58,16 @@ struct HarnessProfileService {
             runtime: runtime,
             model: model.isEmpty ? "—" : model,
             effort: effort.isEmpty ? "—" : effort,
-            note: L10n.tr("harness_note_merge_on", runtime)
+            note: L10n.harnessNoteMergeOn(runtime)
         )
     }
 
     private func modelEffort(runtime: String, tier: String, harnessDir: URL) -> (String, String) {
         let url = harnessDir.appendingPathComponent("\(runtime).toml")
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+        // Prefer path-based read (more reliable on some .agents trees).
+        guard let data = FileManager.default.contents(atPath: url.path),
+              let text = String(data: data, encoding: .utf8)
+        else {
             return ("", "")
         }
         let model = value(in: text, section: "tier_to_model", key: tier)
@@ -149,8 +152,12 @@ struct HarnessProfileService {
         let marker = "[\(section)]"
         guard let start = text.range(of: marker)?.upperBound else { return nil }
         let rest = text[start...]
-        if let next = rest.range(of: "\n[", options: []) {
-            return String(rest[..<next.lowerBound])
+        // Next TOML table header at beginning of a line.
+        let pattern = #"\n\[[^\]]+\]"#
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: String(rest), range: NSRange(location: 0, length: (rest as NSString).length)) {
+            let idx = rest.index(rest.startIndex, offsetBy: match.range.location)
+            return String(rest[..<idx])
         }
         return String(rest)
     }
@@ -158,8 +165,14 @@ struct HarnessProfileService {
     private func inlineValue(in text: String, key: String) -> String? {
         for line in text.components(separatedBy: .newlines) {
             let t = line.trimmingCharacters(in: .whitespaces)
-            guard !t.hasPrefix("#"), t.hasPrefix(key) else { continue }
+            guard !t.hasPrefix("#") else { continue }
+            // Exact key before '=' (avoid matching `xhigh` when looking for `high`).
+            guard t.hasPrefix(key), t.dropFirst(key.count).first == "=" || t.dropFirst(key.count).first == " " else {
+                continue
+            }
             guard let eq = t.firstIndex(of: "=") else { continue }
+            let keyPart = t[..<eq].trimmingCharacters(in: .whitespaces)
+            guard keyPart == key else { continue }
             var v = String(t[t.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
             if let hash = v.firstIndex(of: "#") {
                 v = String(v[..<hash]).trimmingCharacters(in: .whitespaces)

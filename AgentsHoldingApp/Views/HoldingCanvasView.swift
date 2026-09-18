@@ -9,7 +9,7 @@ struct HoldingCanvasView: View {
         Group {
             if let error = appModel.lastError, appModel.holding == nil {
                 ContentUnavailableView(
-                    L10n.tr("holding_not_found"),
+                    L10n.holdingNotFound,
                     systemImage: "building.columns",
                     description: Text(error)
                 )
@@ -26,15 +26,15 @@ struct HoldingCanvasView: View {
                 ProgressView("Loading holding…")
             }
         }
-        .navigationTitle(appModel.holding?.name ?? L10n.tr("holding"))
+        .navigationTitle(appModel.holding?.name ?? L10n.holding)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showAddCompany = true
                 } label: {
-                    Label(L10n.tr("add_company"), systemImage: "plus")
+                    Label(L10n.addCompany, systemImage: "plus")
                 }
-                .help(L10n.tr("add_company_help"))
+                .help(L10n.addCompanyHelp)
             }
         }
         .sheet(isPresented: $showAddCompany) {
@@ -49,15 +49,13 @@ struct HoldingCanvasView: View {
 
     private func header(_ holding: HoldingSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.tr("holding"))
+            Text(L10n.holding)
                 .font(.title2.weight(.semibold))
             Text(holding.path.path)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(
-                L10n.tr(
-                    "holding_stats",
-                    holding.companies.count,
+                L10n.holdingStats(holding.companies.count,
                     holding.teams.count,
                     holding.teams.reduce(0) { $0 + $1.staffs.count }
                 )
@@ -71,18 +69,18 @@ struct HoldingCanvasView: View {
     private func companiesSection(_ holding: HoldingSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(L10n.tr("companies"), systemImage: "building.2")
+                Label(L10n.companies, systemImage: "building.2")
                     .font(.headline)
                 Spacer()
                 Button {
                     showAddCompany = true
                 } label: {
-                    Label(L10n.tr("add"), systemImage: "plus.circle.fill")
+                    Label(L10n.add, systemImage: "plus.circle.fill")
                 }
                 .buttonStyle(.borderless)
             }
             if holding.companies.isEmpty {
-                Text(L10n.tr("holding_companies_empty"))
+                Text(L10n.holdingCompaniesEmpty)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -100,10 +98,10 @@ struct HoldingCanvasView: View {
     @ViewBuilder
     private func teamsSection(_ holding: HoldingSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label(L10n.tr("holding_staffs"), systemImage: "person.3")
+            Label(L10n.holdingStaffs, systemImage: "person.3")
                 .font(.headline)
             if holding.teams.isEmpty {
-                Text(L10n.tr("holding_staffs_empty"))
+                Text(L10n.holdingStaffsEmpty)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

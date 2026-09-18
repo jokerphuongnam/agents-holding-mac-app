@@ -43,8 +43,8 @@ struct CompanyInstallService {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.message = L10n.tr("choose_folder_install")
-        panel.prompt = L10n.tr("choose")
+        panel.message = L10n.chooseFolderInstall
+        panel.prompt = L10n.choose
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -57,8 +57,8 @@ struct CompanyInstallService {
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
         panel.directoryURL = projectRoot
-        panel.message = L10n.tr("choose_allow_paths")
-        panel.prompt = L10n.tr("allow")
+        panel.message = L10n.chooseAllowPaths
+        panel.prompt = L10n.allow
         guard panel.runModal() == .OK else { return [] }
         return panel.urls
     }

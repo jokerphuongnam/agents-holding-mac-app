@@ -8,14 +8,14 @@ struct HarnessProfileSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.tr("harness_profiles_title"))
+                    Text(L10n.harnessProfilesTitle)
                         .font(.title3.weight(.semibold))
-                    Text(L10n.tr("harness_profiles_subtitle", profiles.staffName, profiles.tier))
+                    Text(L10n.harnessProfilesSubtitle(profiles.staffName, profiles.tier))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(L10n.tr("done")) { dismiss() }
+                Button(L10n.done) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(16)
@@ -23,17 +23,17 @@ struct HarnessProfileSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(L10n.tr("harness_profiles_help"))
+                    Text(L10n.harnessProfilesHelp)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     // Header
                     HStack {
-                        Text(L10n.tr("harness_col_mode")).frame(width: 72, alignment: .leading)
-                        Text(L10n.tr("harness_col_runtime")).frame(width: 72, alignment: .leading)
-                        Text(L10n.tr("harness_col_model")).frame(maxWidth: .infinity, alignment: .leading)
-                        Text(L10n.tr("harness_col_effort")).frame(width: 72, alignment: .leading)
+                        Text(L10n.harnessColMode).frame(width: 72, alignment: .leading)
+                        Text(L10n.harnessColRuntime).frame(width: 72, alignment: .leading)
+                        Text(L10n.harnessColModel).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(L10n.harnessColEffort).frame(width: 72, alignment: .leading)
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)

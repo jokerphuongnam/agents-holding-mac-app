@@ -1,0 +1,13 @@
+input_dir: AgentsHoldingApp
+output_dir: AgentsHoldingApp/Generated
+
+strings:
+  inputs:
+    - L10n/en.lproj
+  outputs:
+    - templateName: structured-swift5
+      output: Strings+Generated.swift
+      params:
+        enumName: L10n
+        lookupFunction: L10nLookup
+        publicAccess: false

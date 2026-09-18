@@ -26,8 +26,6 @@ targets:
     platform: macOS
     sources:
       - path: AgentsHoldingApp
-        excludes:
-          - Generated/**
     dependencies:
       - package: MarkdownUI
         product: MarkdownUI
@@ -46,6 +44,17 @@ targets:
           - "@executable_path/../Frameworks"
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
+    preBuildScripts:
+      - name: Generate (SwiftGen)
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          export SKIP_XCODEGEN=1
+          if [ -x "${SRCROOT}/Scripts/generate.sh" ]; then
+            "${SRCROOT}/Scripts/generate.sh"
+          else
+            echo "warning: Scripts/generate.sh missing" >&2
+          fi
     info:
       path: AgentsHoldingApp/Info.plist
       properties:

@@ -3,10 +3,10 @@ import SwiftUI
 struct UsagePlaceholderView: View {
     var body: some View {
         ContentUnavailableView(
-            L10n.tr("usage"),
+            L10n.usage,
             systemImage: "chart.bar",
-            description: Text(L10n.tr("usage_placeholder"))
+            description: Text(L10n.usagePlaceholder)
         )
-        .navigationTitle(L10n.tr("usage"))
+        .navigationTitle(L10n.usage)
     }
 }

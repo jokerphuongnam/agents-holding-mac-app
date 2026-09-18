@@ -17,7 +17,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Bundle language code used for Localizable.strings (`nil` = follow system).
     var bundleCode: String? {
         switch self {
         case .system: return nil
@@ -33,12 +32,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .vietnamese: return Locale(identifier: "vi")
         }
     }
+
+    var displayName: String {
+        L10nLookup(displayNameKey, "Localizable", displayNameKey)
+    }
 }
 
 @MainActor
 final class LanguageStore: ObservableObject {
     static let shared = LanguageStore()
-
     static let defaultsKey = "appLanguage"
 
     @Published var language: AppLanguage {
@@ -58,30 +60,18 @@ final class LanguageStore: ObservableObject {
     var locale: Locale { language.locale }
 }
 
-enum L10n {
-    /// Thread-safe: reads language from UserDefaults + lproj bundle.
-    static func tr(_ key: String) -> String {
-        let bundle = localizationBundle()
-        return NSLocalizedString(key, tableName: "Localizable", bundle: bundle, value: key, comment: "")
+/// SwiftGen `lookupFunction` — picks en/vi bundle from Settings (or system).
+func L10nLookup(_ key: String, _ table: String, _ value: String) -> String {
+    let raw = UserDefaults.standard.string(forKey: LanguageStore.defaultsKey) ?? AppLanguage.system.rawValue
+    let language = AppLanguage(rawValue: raw) ?? .system
+    let bundle: Bundle
+    if let code = language.bundleCode,
+       let path = Bundle.main.path(forResource: code, ofType: "lproj"),
+       let b = Bundle(path: path) {
+        bundle = b
+    } else {
+        bundle = .main
     }
-
-    static func tr(_ key: String, _ args: CVarArg...) -> String {
-        let lang = currentLanguage()
-        return String(format: tr(key), locale: lang.locale, arguments: args)
-    }
-
-    private static func currentLanguage() -> AppLanguage {
-        let raw = UserDefaults.standard.string(forKey: LanguageStore.defaultsKey) ?? AppLanguage.system.rawValue
-        return AppLanguage(rawValue: raw) ?? .system
-    }
-
-    private static func localizationBundle() -> Bundle {
-        guard let code = currentLanguage().bundleCode,
-              let path = Bundle.main.path(forResource: code, ofType: "lproj"),
-              let bundle = Bundle(path: path)
-        else {
-            return .main
-        }
-        return bundle
-    }
+    let format = NSLocalizedString(key, tableName: table, bundle: bundle, value: value, comment: "")
+    return format
 }

@@ -7,31 +7,31 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section(L10n.tr("language_section")) {
-                Picker(L10n.tr("language_picker"), selection: $languageStore.language) {
+            Section(L10n.languageSection) {
+                Picker(L10n.languagePicker, selection: $languageStore.language) {
                     ForEach(AppLanguage.allCases) { lang in
-                        Text(L10n.tr(lang.displayNameKey)).tag(lang)
+                        Text(lang.displayName).tag(lang)
                     }
                 }
             }
 
-            Section(L10n.tr("holding_path")) {
-                TextField(L10n.tr("holding_path"), text: $holdingPath)
-                Text(L10n.tr("holding_path_help"))
+            Section(L10n.holdingPath) {
+                TextField(L10n.holdingPath, text: $holdingPath)
+                Text(L10n.holdingPathHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let path = appModel.holdingPath {
-                    Text(L10n.tr("active_path", path.path))
+                    Text(L10n.activePath(path.path))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .textSelection(.enabled)
                 }
-                Button(L10n.tr("use_documents_holding")) {
+                Button(L10n.useDocumentsHolding) {
                     let p = NSHomeDirectory() + "/Documents/Agents/agents-holding"
                     holdingPath = p
                     appModel.reloadHolding()
                 }
-                Button(L10n.tr("apply_reload")) {
+                Button(L10n.applyReload) {
                     appModel.reloadHolding()
                 }
             }

@@ -16,7 +16,7 @@ struct CompanyCanvasView: View {
                         // Only company-scoped assets here; role skills/scripts live on staff detail.
                         if !snap.skills.isEmpty {
                             FileListSection(
-                                title: L10n.tr("company_skills"),
+                                title: L10n.companySkills,
                                 systemImage: "book",
                                 files: snap.skills,
                                 emptyText: ""
@@ -31,10 +31,10 @@ struct CompanyCanvasView: View {
                             }
                         }
                         FileListSection(
-                            title: L10n.tr("company_scripts"),
+                            title: L10n.companyScripts,
                             systemImage: "terminal",
                             files: snap.scripts,
-                            emptyText: L10n.tr("company_scripts_empty")
+                            emptyText: L10n.companyScriptsEmpty
                         ) { file in
                             appModel.openCodeFile(file)
                         }
@@ -44,15 +44,15 @@ struct CompanyCanvasView: View {
                 .navigationTitle(snap.node.displayName)
             } else {
                 ContentUnavailableView(
-                    L10n.tr("no_company_open"),
+                    L10n.noCompanyOpen,
                     systemImage: "building.2",
-                    description: Text(L10n.tr("pick_company_hint"))
+                    description: Text(L10n.pickCompanyHint)
                 )
             }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(appModel.companyStack.count > 1 ? L10n.tr("parent") : L10n.tr("holding")) {
+                Button(appModel.companyStack.count > 1 ? L10n.parent : L10n.holding) {
                     appModel.backOneCompany()
                 }
             }
@@ -99,10 +99,10 @@ struct CompanyCanvasView: View {
     @ViewBuilder
     private func childrenSection(_ snap: CompanySnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(L10n.tr("child_companies_title"), systemImage: "arrow.triangle.branch")
+            Label(L10n.childCompaniesTitle, systemImage: "arrow.triangle.branch")
                 .font(.headline)
             if snap.children.isEmpty {
-                Text(L10n.tr("no_child_companies"))
+                Text(L10n.noChildCompanies)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -120,11 +120,11 @@ struct CompanyCanvasView: View {
     @ViewBuilder
     private func teamsSection(_ snap: CompanySnapshot) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label(L10n.tr("teams_staffs"), systemImage: "person.3")
+            Label(L10n.teamsStaffs, systemImage: "person.3")
                 .font(.headline)
 
             if snap.teams.isEmpty {
-                Text(L10n.tr("no_teams"))
+                Text(L10n.noTeams)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -161,7 +161,7 @@ struct TeamBlock: View {
             }
 
             if team.staffs.isEmpty {
-                Text(L10n.tr("no_staffs_in_team"))
+                Text(L10n.noStaffsInTeam)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -192,7 +192,7 @@ struct StaffCard: View {
                     Image(systemName: "person.fill")
                     if reportCount > 0 {
                         Spacer()
-                        Text(L10n.tr("reports_badge", reportCount))
+                        Text(L10n.reportsBadge(reportCount))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)

@@ -3,7 +3,6 @@ import SwiftUI
 
 struct StaffDetailView: View {
     @EnvironmentObject private var appModel: AppModel
-    @State private var showHarnessProfiles = false
     @State private var harnessProfiles: StaffHarnessProfiles?
 
     var body: some View {
@@ -15,10 +14,10 @@ struct StaffDetailView: View {
                         orgSection(detail)
                         scopeSection(detail)
                         FileListSection(
-                            title: L10n.tr("skills_files"),
+                            title: L10n.skillsFiles,
                             systemImage: "book",
                             files: detail.skillFiles,
-                            emptyText: L10n.tr("skills_empty", detail.node.team, detail.node.name)
+                            emptyText: L10n.skillsEmpty(detail.node.team, detail.node.name)
                         ) { file in
                             appModel.openSkill(
                                 SkillRef(
@@ -29,10 +28,10 @@ struct StaffDetailView: View {
                             )
                         }
                         FileListSection(
-                            title: L10n.tr("scripts_files"),
+                            title: L10n.scriptsFiles,
                             systemImage: "terminal",
                             files: detail.scriptFiles,
-                            emptyText: L10n.tr("scripts_empty")
+                            emptyText: L10n.scriptsEmpty
                         ) { file in
                             appModel.openCodeFile(file)
                         }
@@ -42,18 +41,16 @@ struct StaffDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .navigationTitle(detail.node.name)
-                .sheet(isPresented: $showHarnessProfiles) {
-                    if let harnessProfiles {
-                        HarnessProfileSheet(profiles: harnessProfiles)
-                    }
+                .sheet(item: $harnessProfiles) { profiles in
+                    HarnessProfileSheet(profiles: profiles)
                 }
             } else {
-                ContentUnavailableView(L10n.tr("staff_not_found"), systemImage: "person.slash")
+                ContentUnavailableView(L10n.staffNotFound, systemImage: "person.slash")
             }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.tr("back")) { appModel.backFromStaff() }
+                Button(L10n.back) { appModel.backFromStaff() }
             }
         }
     }
@@ -62,17 +59,17 @@ struct StaffDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(detail.node.name)
                 .font(.largeTitle.weight(.semibold))
-            Text(L10n.tr("team", detail.node.team))
+            Text(L10n.team(detail.node.team))
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 if !detail.tier.isEmpty {
                     Button {
-                        harnessProfiles = HarnessProfileService().profiles(
+                        let profiles = HarnessProfileService().profiles(
                             forStaff: detail.node.name,
                             tier: detail.tier,
                             companyRoot: detail.companyRoot
                         )
-                        showHarnessProfiles = true
+                        harnessProfiles = profiles
                     } label: {
                         HStack(spacing: 4) {
                             Text(detail.tier)
@@ -85,7 +82,7 @@ struct StaffDetailView: View {
                         .background(.quaternary, in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    .help(L10n.tr("harness_tier_help"))
+                    .help(L10n.harnessTierHelp)
                 }
                 if !detail.permissionMode.isEmpty {
                     badge(detail.permissionMode)
@@ -114,14 +111,14 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func orgSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(L10n.tr("org_hop_chain"), systemImage: "arrow.up.arrow.down")
+            Label(L10n.orgHopChain, systemImage: "arrow.up.arrow.down")
                 .font(.headline)
-            Text(L10n.tr("org_hop_help"))
+            Text(L10n.orgHopHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .top) {
-                Text(L10n.tr("superior_label"))
+                Text(L10n.superiorLabel)
                     .foregroundStyle(.secondary)
                     .frame(width: 200, alignment: .leading)
                 if let lead = detail.lead, !lead.isEmpty {
@@ -138,16 +135,16 @@ struct StaffDetailView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .help(L10n.tr("open_superior"))
+                    .help(L10n.openSuperior)
                 } else {
-                    Text(L10n.tr("top_dispatcher"))
+                    Text(L10n.topDispatcher)
                         .foregroundStyle(.tertiary)
                 }
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(L10n.tr("reports_label"))
+                    Text(L10n.reportsLabel)
                         .foregroundStyle(.secondary)
                     if !detail.reports.isEmpty {
                         Text("\(detail.reports.count)")
@@ -158,7 +155,7 @@ struct StaffDetailView: View {
                     }
                 }
                 if detail.reports.isEmpty {
-                    Text(L10n.tr("no_reports_leaf"))
+                    Text(L10n.noReportsLeaf)
                         .foregroundStyle(.tertiary)
                 } else {
                     VStack(spacing: 0) {
@@ -202,20 +199,20 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func scopeSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(L10n.tr("path_fence"), systemImage: "folder.badge.gearshape")
+            Label(L10n.pathFence, systemImage: "folder.badge.gearshape")
                 .font(.headline)
-            Text(L10n.tr("path_fence_help"))
+            Text(L10n.pathFenceHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             if detail.allowedPaths.isEmpty && detail.deniedHints.isEmpty {
-                Text(L10n.tr("path_fence_empty"))
+                Text(L10n.pathFenceEmpty)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             if !detail.allowedPaths.isEmpty {
-                Text(L10n.tr("allowed_rw"))
+                Text(L10n.allowedRw)
                     .font(.subheadline.weight(.semibold))
                 ForEach(detail.allowedPaths, id: \.self) { path in
                     Text(path)
@@ -225,7 +222,7 @@ struct StaffDetailView: View {
             }
 
             if !detail.deniedHints.isEmpty {
-                Text(L10n.tr("denied_must_not"))
+                Text(L10n.deniedMustNot)
                     .font(.subheadline.weight(.semibold))
                     .padding(.top, 4)
                 ForEach(detail.deniedHints, id: \.self) { path in
@@ -243,7 +240,7 @@ struct StaffDetailView: View {
 
     private func bodySection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(L10n.tr("staff_brief"), systemImage: "doc.richtext")
+            Label(L10n.staffBrief, systemImage: "doc.richtext")
                 .font(.headline)
             Markdown(detail.bodyMarkdown)
                 .markdownTheme(.gitHub)

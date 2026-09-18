@@ -35,25 +35,25 @@ struct SidebarView: View {
 
     var body: some View {
         List {
-            Section(L10n.tr("navigate")) {
-                Button(L10n.tr("holding")) { appModel.backToHolding() }
-                Button(L10n.tr("usage")) { appModel.selection = .usage }
+            Section(L10n.navigate) {
+                Button(L10n.holding) { appModel.backToHolding() }
+                Button(L10n.usage) { appModel.selection = .usage }
             }
-            Section(L10n.tr("actions")) {
-                Text(L10n.tr("add_company_hint"))
+            Section(L10n.actions) {
+                Text(L10n.addCompanyHint)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             if let holding = appModel.holding {
-                Section(L10n.tr("companies")) {
+                Section(L10n.companies) {
                     ForEach(holding.companies) { company in
                         Button(company.displayName) {
                             appModel.openCompanyNode(company)
                         }
                     }
                 }
-                Section(L10n.tr("holding_staffs_section")) {
+                Section(L10n.holdingStaffsSection) {
                     ForEach(holding.teams) { team in
                         DisclosureGroup(team.name) {
                             ForEach(team.staffs) { staff in
@@ -67,9 +67,9 @@ struct SidebarView: View {
             }
 
             if let snap = appModel.openCompany {
-                Section(L10n.tr("in_company", snap.node.displayName)) {
+                Section(L10n.inCompany(snap.node.displayName)) {
                     if !snap.children.isEmpty {
-                        Text(L10n.tr("child_companies"))
+                        Text(L10n.childCompanies)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         ForEach(snap.children) { child in
@@ -90,7 +90,7 @@ struct SidebarView: View {
                 }
             }
         }
-        .navigationTitle(L10n.tr("holding"))
+        .navigationTitle(L10n.holding)
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
                 if let path = appModel.holdingPath {
@@ -105,7 +105,7 @@ struct SidebarView: View {
                         .foregroundStyle(.red)
                         .lineLimit(3)
                 }
-                Button(L10n.tr("reload_holding")) { appModel.reloadHolding() }
+                Button(L10n.reloadHolding) { appModel.reloadHolding() }
                     .buttonStyle(.borderless)
             }
             .padding()
