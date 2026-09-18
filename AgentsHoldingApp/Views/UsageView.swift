@@ -16,7 +16,7 @@ struct UsageView: View {
     @State private var report: UsageReport?
 
     private let ledger = UsageLedgerService()
-    private let chartModels = ["grok", "claude", "codex"]
+    @State private var availableModels: [String] = []
 
     var body: some View {
         ScrollView {
@@ -134,15 +134,14 @@ struct UsageView: View {
             }
             .frame(maxWidth: 420)
 
-            // Model — All adds model columns; one value filters + single model column
+            // Model — discovered from system/harness/*.toml (not hardcoded).
             Picker(L10n.usageColModel, selection: $modelSelection) {
                 Text(L10n.usageModelAll).tag("")
-                Text("grok").tag("grok")
-                Text("claude").tag("claude")
-                Text("codex").tag("codex")
+                ForEach(availableModels, id: \.self) { model in
+                    Text(model).tag(model)
+                }
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 420)
+            .frame(maxWidth: 480)
 
             HStack {
                 Button(L10n.usagePreset7d) { applyPreset(days: 7) }
@@ -268,7 +267,8 @@ struct UsageView: View {
     private func shareChart(_ report: UsageReport, innerRatio: CGFloat) -> some View {
         let slices: [UsageModelBreakdown] = {
             if modelSelection.isEmpty {
-                return chartModels.map {
+                let models = report.availableModels.isEmpty ? Array(report.rangeByModel.keys).sorted() : report.availableModels
+                return models.map {
                     UsageModelBreakdown(model: $0, tokens: report.rangeByModel[$0] ?? 0)
                 }
             }
@@ -301,7 +301,14 @@ struct UsageView: View {
     }
 
     private func timelinePoints(_ report: UsageReport) -> [UsageChartPoint] {
-        let models = modelSelection.isEmpty ? chartModels : [modelSelection]
+        let models: [String]
+        if !modelSelection.isEmpty {
+            models = [modelSelection]
+        } else if !report.availableModels.isEmpty {
+            models = report.availableModels
+        } else {
+            models = Array(Set(report.chartBuckets.flatMap(\.byModel.keys))).sorted()
+        }
         return report.chartBuckets.flatMap { bucket in
             models.map { model in
                 UsageChartPoint(
@@ -323,11 +330,6 @@ struct UsageView: View {
             )
             .foregroundStyle(by: .value(L10n.usageColModel, point.model))
         }
-        .chartForegroundStyleScale([
-            "grok": Color.orange,
-            "claude": Color.purple,
-            "codex": Color.blue,
-        ])
         .readableCategoryXAxis(periodCount: periodCount)
         .chartScrollableAxes(periodCount > 10 ? .horizontal : [])
         .chartXVisibleDomain(length: periodCount > 10 ? min(periodCount, 12) : periodCount)
@@ -351,11 +353,6 @@ struct UsageView: View {
             )
             .foregroundStyle(by: .value(L10n.usageColModel, point.model))
         }
-        .chartForegroundStyleScale([
-            "grok": Color.orange,
-            "claude": Color.purple,
-            "codex": Color.blue,
-        ])
         .readableCategoryXAxis(periodCount: periodCount)
         .chartScrollableAxes(periodCount > 10 ? .horizontal : [])
         .chartXVisibleDomain(length: periodCount > 10 ? min(periodCount, 12) : periodCount)
@@ -469,6 +466,13 @@ struct UsageView: View {
             case .companySubtree, .staff(_, false): return nil
             }
         }()
+        availableModels = HarnessCatalog.vendorHarnesses(
+            holdingRoot: includeHoldingLedger,
+            companies: companies
+        )
+        if !modelSelection.isEmpty, !availableModels.contains(modelSelection) {
+            modelSelection = ""
+        }
         let loaded = ledger.loadRawEvents(
             holdingRoot: includeHoldingLedger,
             companies: companies,
@@ -499,7 +503,8 @@ struct UsageView: View {
             model: modelSelection.isEmpty ? nil : modelSelection,
             rangeStart: start,
             rangeEnd: end,
-            bucket: bucket
+            bucket: bucket,
+            availableModels: availableModels
         )
         report = ledger.report(
             events: rawEvents,

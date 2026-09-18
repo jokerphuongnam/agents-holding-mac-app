@@ -20,7 +20,7 @@ One JSON object per line:
 | `company` | Company slug (optional for holding-wide) |
 | `staff` | Staff role name |
 | `worktree` | Worktree name (optional; filterable in UI) |
-| `model` | Normalized to `grok` / `claude` / `codex` / `other` (substring match) |
+| `model` | Bucketed against **discovered** `system/harness/*.toml` ids (e.g. grok, claude, codex, deepseek); unknown → `other` |
 | `launch_mode` | Optional: `grok` / `claude` / `codex` / `merge` |
 | `total_tokens` | If omitted, `input_tokens + output_tokens` |
 

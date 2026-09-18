@@ -35,7 +35,7 @@ struct UsageEvent: Hashable, Codable {
         self.company = company
         self.staff = staff
         self.worktree = worktree
-        self.model = Self.normalizeModel(model)
+        self.model = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         self.launchMode = launchMode
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
@@ -56,7 +56,10 @@ struct UsageEvent: Hashable, Codable {
         company = try c.decodeIfPresent(String.self, forKey: .company)
         staff = try c.decodeIfPresent(String.self, forKey: .staff)
         worktree = try c.decodeIfPresent(String.self, forKey: .worktree)
-        model = Self.normalizeModel(try c.decodeIfPresent(String.self, forKey: .model) ?? "other")
+        // Keep raw-ish model; re-bucket later with discovered harness list.
+        model = (try c.decodeIfPresent(String.self, forKey: .model) ?? "other")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
         launchMode = try c.decodeIfPresent(String.self, forKey: .launchMode)
         inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
         outputTokens = try c.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
@@ -77,17 +80,8 @@ struct UsageEvent: Hashable, Codable {
         try c.encode(totalTokens, forKey: .totalTokens)
     }
 
-    static func normalizeModel(_ raw: String) -> String {
-        let m = raw.lowercased()
-        if m.contains("grok") { return "grok" }
-        if m.contains("claude") || m.contains("sonnet") || m.contains("opus") || m.contains("haiku") {
-            return "claude"
-        }
-        if m.contains("codex") || m.contains("gpt") || m.contains("o1") || m.contains("o3") {
-            return "codex"
-        }
-        if m == "merge" { return "merge" }
-        return "other"
+    mutating func rebucket(knownHarnesses: [String]) {
+        model = HarnessCatalog.bucket(model, known: knownHarnesses)
     }
 }
 
@@ -116,6 +110,8 @@ struct UsageQuery: Equatable {
     var rangeStart: Date
     var rangeEnd: Date
     var bucket: UsageBucket
+    /// Discovered from system/harness/*.toml — drives columns & filters.
+    var availableModels: [String]
 }
 
 struct UsageModelBreakdown: Hashable, Identifiable {
@@ -155,6 +151,8 @@ struct UsageReport: Hashable {
     var eventCount: Int
     var filteredCount: Int
     var availableWorktrees: [String]
+    /// Harness ids discovered for this scope (not hardcoded).
+    var availableModels: [String]
     var dataStart: Date?
     var dataEnd: Date?
     var table: UsageDynamicTable

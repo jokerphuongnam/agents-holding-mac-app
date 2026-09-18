@@ -2,12 +2,17 @@ import Foundation
 
 /// Resolves per-mode model/effort for a staff from `system/harness/*.toml`.
 struct HarnessProfileService {
-    private let modes = ["grok", "claude", "codex", "merge"]
-
     func profiles(forStaff name: String, tier: String, companyRoot: URL) -> StaffHarnessProfiles {
         let harnessDir = companyRoot.appendingPathComponent("system/harness")
         let effectiveTier = normalizedTier(tier)
         let router = loadRouter(harnessDir: harnessDir)
+        var modes = HarnessCatalog.vendorHarnesses(in: companyRoot)
+        // merge overlay is always a launch mode when router file exists
+        if FileManager.default.fileExists(atPath: harnessDir.appendingPathComponent("runtime_router.toml").path) {
+            if !modes.contains("merge") {
+                modes.append("merge")
+            }
+        }
 
         var rows: [HarnessModeProfile] = []
         for mode in modes {
@@ -16,7 +21,8 @@ struct HarnessProfileService {
                     staff: name,
                     tier: effectiveTier,
                     harnessDir: harnessDir,
-                    router: router
+                    router: router,
+                    vendors: HarnessCatalog.vendorHarnesses(in: companyRoot)
                 ))
             } else {
                 let (model, effort) = modelEffort(runtime: mode, tier: effectiveTier, harnessDir: harnessDir)
@@ -38,10 +44,13 @@ struct HarnessProfileService {
         staff: String,
         tier: String,
         harnessDir: URL,
-        router: RouterConfig
+        router: RouterConfig,
+        vendors: [String]
     ) -> HarnessModeProfile {
+        let fallback = router.defaultRuntime.isEmpty
+            ? (vendors.first ?? "grok")
+            : router.defaultRuntime
         if !router.enabled {
-            let fallback = router.defaultRuntime.isEmpty ? "grok" : router.defaultRuntime
             let (model, effort) = modelEffort(runtime: fallback, tier: tier, harnessDir: harnessDir)
             return HarnessModeProfile(
                 mode: "merge",

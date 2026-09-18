@@ -2,8 +2,6 @@ import Foundation
 
 /// Reads usage ledgers and builds **one** dynamic table from active filters.
 struct UsageLedgerService {
-    private let primaryModels = ["grok", "claude", "codex"]
-
     private let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
@@ -59,11 +57,20 @@ struct UsageLedgerService {
             to: cal.startOfDay(for: query.rangeEnd)
         ) ?? query.rangeEnd
 
-        let dataStart = allEvents.map(\.timestamp).min()
-        let dataEnd = allEvents.map(\.timestamp).max()
-        let worktrees = Set(allEvents.compactMap { $0.worktree }.filter { !$0.isEmpty }).sorted()
+        let known = query.availableModels.isEmpty
+            ? Array(Set(allEvents.map(\.model))).sorted()
+            : query.availableModels
 
-        var filtered = allEvents.filter { $0.timestamp >= start && $0.timestamp < endExclusive }
+        var normalized = allEvents
+        for i in normalized.indices {
+            normalized[i].rebucket(knownHarnesses: known)
+        }
+
+        let dataStart = normalized.map(\.timestamp).min()
+        let dataEnd = normalized.map(\.timestamp).max()
+        let worktrees = Set(normalized.compactMap { $0.worktree }.filter { !$0.isEmpty }).sorted()
+
+        var filtered = normalized.filter { $0.timestamp >= start && $0.timestamp < endExclusive }
         if let wt = query.worktree, !wt.isEmpty {
             filtered = filtered.filter { ($0.worktree ?? "") == wt }
         }
@@ -73,6 +80,7 @@ struct UsageLedgerService {
 
         let splitWorktree = query.worktree == nil || query.worktree?.isEmpty == true
         let splitModelColumns = query.model == nil || query.model?.isEmpty == true
+        let modelColumns = known.isEmpty ? Array(Set(filtered.map(\.model))).sorted() : known
 
         let table = buildTable(
             events: filtered,
@@ -80,6 +88,7 @@ struct UsageLedgerService {
             splitWorktree: splitWorktree,
             splitModelColumns: splitModelColumns,
             singleModel: query.model,
+            modelColumns: modelColumns,
             calendar: cal
         )
 
@@ -96,6 +105,7 @@ struct UsageLedgerService {
             eventCount: allEvents.count,
             filteredCount: filtered.count,
             availableWorktrees: worktrees,
+            availableModels: modelColumns,
             dataStart: dataStart,
             dataEnd: dataEnd,
             table: table,
@@ -114,6 +124,7 @@ struct UsageLedgerService {
         splitWorktree: Bool,
         splitModelColumns: Bool,
         singleModel: String?,
+        modelColumns: [String],
         calendar: Calendar
     ) -> UsageDynamicTable {
         var columns: [UsageTableColumn] = [
@@ -124,7 +135,7 @@ struct UsageLedgerService {
         }
         columns.append(UsageTableColumn(key: "total", title: "total"))
         if splitModelColumns {
-            for m in primaryModels {
+            for m in modelColumns {
                 columns.append(UsageTableColumn(key: m, title: m))
             }
         } else if let m = singleModel, !m.isEmpty {
@@ -169,7 +180,7 @@ struct UsageLedgerService {
                 cells["worktree"] = worktree
             }
             if splitModelColumns {
-                for m in primaryModels {
+                for m in modelColumns {
                     let n = byModel[m] ?? 0
                     cells[m] = "\(n)"
                     numeric[m] = n
