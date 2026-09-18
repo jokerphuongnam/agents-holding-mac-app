@@ -1,8 +1,8 @@
 # agents-holding-mac-app
 
-macOS **SwiftUI** mission-control UI for [agents-holding](../agents-holding) (Paperclip-inspired org canvas + in-company CEO/BA chat + Usage).
+macOS **SwiftUI** mission-control UI for [agents-holding](https://github.com/jokerphuongnam/agents-holding) (Paperclip-inspired org canvas + in-company CEO/BA chat + Usage).
 
-Sibling of `agents-holding` under `Documents/Agents/` — **not** inside the holding git tree.
+Companion app for the holding Company OS — **not** inside the [agents-holding](https://github.com/jokerphuongnam/agents-holding) git tree.
 
 ## Install (prebuilt DMG)
 
@@ -58,7 +58,7 @@ Holding path resolution (first match wins):
 
 1. Env `AGENTS_HOLDING_PATH`
 2. Settings / `UserDefaults` key `holdingPath`
-3. Sibling `../agents-holding`
+3. Sibling checkout `../agents-holding` (local clone of [agents-holding](https://github.com/jokerphuongnam/agents-holding))
 4. `~/Documents/Agents/agents-holding`
 
 ## P0 scaffold status
@@ -72,4 +72,4 @@ Holding path resolution (first match wins):
 
 ## License
 
-Private — same org as agents-holding.
+Private — same org as [agents-holding](https://github.com/jokerphuongnam/agents-holding).

@@ -48,14 +48,15 @@ fi
 
 echo "==> xcodebuild $CONFIGURATION ($SCHEME)"
 rm -rf "$DERIVED"
+# Avoid codesign flakes from Finder xattrs during Release build.
 xcodebuild \
   -project "$ROOT/AgentsHoldingApp.xcodeproj" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
   -derivedDataPath "$DERIVED" \
   -destination 'platform=macOS' \
-  CODE_SIGN_IDENTITY="-" \
-  CODE_SIGNING_ALLOWED=YES \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   build
 
@@ -69,7 +70,13 @@ echo "    app: $APP"
 STAGE="$DIST/dmg-root"
 rm -rf "$STAGE" "$DIST/$DMG_NAME"
 mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
+ditto "$APP" "$STAGE/$(basename "$APP")"
+# Strip resource forks / xattrs that break Gatekeeper & codesign
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "$STAGE"
+fi
+# Ad-hoc sign for local distribution (not notarized)
+codesign --force --deep --sign - "$STAGE/$(basename "$APP")" || true
 # Drag-to-Applications convenience
 ln -s /Applications "$STAGE/Applications"
 

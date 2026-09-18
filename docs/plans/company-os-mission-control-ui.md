@@ -1,7 +1,7 @@
 # Company OS — Mission Control UI (Paperclip-inspired)
 
 Status: **draft plan** (not PO-locked).  
-**UI repo:** `agents-holding-app` (macOS SwiftUI) — sibling of `agents-holding` under `Documents/Agents/`.  
+**UI repo:** [`agents-holding-mac-app`](https://github.com/jokerphuongnam/agents-holding-mac-app) (macOS SwiftUI) — companion to [`agents-holding`](https://github.com/jokerphuongnam/agents-holding).  
 Scope: **company OS mission control** — not Desk Garden product gameplay.
 
 Inspired by [Paperclip](https://paperclip.ing/) (org canvas / manage a company of agents), adapted to Marlin **holding + company OS** (staffs, child companies, harnesses, plans, worktrees, user channels).
@@ -17,7 +17,7 @@ Ngoài ra có **screen thống kê token riêng** (theo staff / model / worktree
 
 | Decision | Choice |
 | --- | --- |
-| Code home | **`agents-holding-app`** — sibling ngang cấp `agents-holding` (không nằm trong holding hay marlin-language) |
+| Code home | **[`agents-holding-mac-app`](https://github.com/jokerphuongnam/agents-holding-mac-app)** — companion của [`agents-holding`](https://github.com/jokerphuongnam/agents-holding) |
 | Stack | **macOS SwiftUI** (native FS, windowing, polish motion) |
 | Data SoT | Read (later write policies) from **`agents-holding`** path — never vendor staff SoT into the app repo |
 | Entry | App **tự tìm path Holding** (`AGENTS_HOLDING_PATH` / Settings / sibling `../agents-holding`) |
