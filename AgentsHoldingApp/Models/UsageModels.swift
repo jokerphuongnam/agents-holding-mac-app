@@ -5,7 +5,8 @@ struct UsageEvent: Hashable, Codable {
     var timestamp: Date
     var company: String?
     var staff: String?
-    /// Vendor bucket: grok | claude | codex | other
+    var worktree: String?
+    /// Vendor bucket: grok | claude | codex | merge | other
     var model: String
     var launchMode: String?
     var inputTokens: Int
@@ -13,7 +14,7 @@ struct UsageEvent: Hashable, Codable {
     var totalTokens: Int
 
     enum CodingKeys: String, CodingKey {
-        case timestamp, company, staff, model
+        case timestamp, company, staff, worktree, model
         case launchMode = "launch_mode"
         case inputTokens = "input_tokens"
         case outputTokens = "output_tokens"
@@ -24,6 +25,7 @@ struct UsageEvent: Hashable, Codable {
         timestamp: Date,
         company: String? = nil,
         staff: String? = nil,
+        worktree: String? = nil,
         model: String,
         launchMode: String? = nil,
         inputTokens: Int = 0,
@@ -33,6 +35,7 @@ struct UsageEvent: Hashable, Codable {
         self.timestamp = timestamp
         self.company = company
         self.staff = staff
+        self.worktree = worktree
         self.model = Self.normalizeModel(model)
         self.launchMode = launchMode
         self.inputTokens = inputTokens
@@ -53,6 +56,7 @@ struct UsageEvent: Hashable, Codable {
         }
         company = try c.decodeIfPresent(String.self, forKey: .company)
         staff = try c.decodeIfPresent(String.self, forKey: .staff)
+        worktree = try c.decodeIfPresent(String.self, forKey: .worktree)
         model = Self.normalizeModel(try c.decodeIfPresent(String.self, forKey: .model) ?? "other")
         launchMode = try c.decodeIfPresent(String.self, forKey: .launchMode)
         inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
@@ -66,6 +70,7 @@ struct UsageEvent: Hashable, Codable {
         try c.encode(ISO8601DateFormatter.fractional.string(from: timestamp), forKey: .timestamp)
         try c.encodeIfPresent(company, forKey: .company)
         try c.encodeIfPresent(staff, forKey: .staff)
+        try c.encodeIfPresent(worktree, forKey: .worktree)
         try c.encode(model, forKey: .model)
         try c.encodeIfPresent(launchMode, forKey: .launchMode)
         try c.encode(inputTokens, forKey: .inputTokens)
@@ -87,6 +92,24 @@ struct UsageEvent: Hashable, Codable {
     }
 }
 
+enum UsageBucket: String, CaseIterable, Identifiable {
+    case day
+    case week
+    case month
+    case year
+
+    var id: String { rawValue }
+}
+
+struct UsageQuery: Equatable {
+    var scopeCompany: Bool
+    /// nil = all worktrees
+    var worktree: String?
+    var rangeStart: Date
+    var rangeEnd: Date
+    var bucket: UsageBucket
+}
+
 struct UsageModelBreakdown: Hashable, Identifiable {
     var id: String { model }
     var model: String
@@ -95,7 +118,6 @@ struct UsageModelBreakdown: Hashable, Identifiable {
 
 struct UsagePeriodRow: Hashable, Identifiable {
     var id: String { label }
-    /// "all-time" | "today" | "yyyy-MM-dd"
     var label: String
     var total: Int
     var byModel: [UsageModelBreakdown]
@@ -104,13 +126,17 @@ struct UsagePeriodRow: Hashable, Identifiable {
 struct UsageReport: Hashable {
     var scopeLabel: String
     var eventCount: Int
-    var allTime: UsagePeriodRow
-    var today: UsagePeriodRow
-    var byDay: [UsagePeriodRow]
+    var filteredCount: Int
+    var availableWorktrees: [String]
+    /// Min/max timestamps in loaded ledgers (for default range).
+    var dataStart: Date?
+    var dataEnd: Date?
+    var rangeTotal: UsagePeriodRow
+    var buckets: [UsagePeriodRow]
     var ledgerPaths: [URL]
 }
 
-private extension ISO8601DateFormatter {
+extension ISO8601DateFormatter {
     static let fractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

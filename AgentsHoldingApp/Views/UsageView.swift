@@ -2,8 +2,16 @@ import SwiftUI
 
 struct UsageView: View {
     @EnvironmentObject private var appModel: AppModel
+
+    @State private var scopeCompany = true
+    @State private var worktreeSelection: String = "" // "" = all
+    @State private var rangeStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    @State private var rangeEnd: Date = Date()
+    @State private var bucket: UsageBucket = .day
+
+    @State private var rawEvents: [UsageEvent] = []
+    @State private var ledgerPaths: [URL] = []
     @State private var report: UsageReport?
-    @State private var scopeCompany: Bool = true
 
     private let ledger = UsageLedgerService()
 
@@ -11,16 +19,11 @@ struct UsageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                if let report, report.eventCount > 0 {
+                filters
+                if let report, report.filteredCount > 0 || report.eventCount > 0 {
                     summaryCards(report)
-                    periodTable(
-                        title: L10n.usageTableSummary,
-                        rows: [report.allTime, report.today]
-                    )
-                    periodTable(
-                        title: L10n.usageTableByDay,
-                        rows: report.byDay
-                    )
+                    periodTable(title: L10n.usageTableSummary, rows: [report.rangeTotal])
+                    periodTable(title: bucketTableTitle, rows: report.buckets)
                     ledgerFooter(report)
                 } else {
                     emptyState
@@ -32,40 +35,113 @@ struct UsageView: View {
         .navigationTitle(L10n.usage)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(L10n.reload) { reload() }
+                Button(L10n.reload) { reloadRaw() }
             }
         }
-        .onAppear { reload() }
-        .onChange(of: appModel.openCompany?.node.id) { _, _ in reload() }
-        .onChange(of: scopeCompany) { _, _ in reload() }
+        .onAppear { reloadRaw() }
+        .onChange(of: appModel.openCompany?.node.id) { _, _ in reloadRaw() }
+        .onChange(of: scopeCompany) { _, _ in reloadRaw() }
+        .onChange(of: worktreeSelection) { _, _ in reaggregate() }
+        .onChange(of: rangeStart) { _, _ in reaggregate() }
+        .onChange(of: rangeEnd) { _, _ in reaggregate() }
+        .onChange(of: bucket) { _, _ in reaggregate() }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(L10n.usage)
                 .font(.title2.weight(.semibold))
             Text(L10n.usageHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var filters: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.usageFilters)
+                .font(.headline)
+
             Picker(L10n.usageScope, selection: $scopeCompany) {
                 Text(L10n.usageScopeHolding).tag(false)
                 Text(L10n.usageScopeCompany).tag(true)
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 360)
-            if scopeCompany, let company = appModel.openCompany?.node {
-                Text(company.slug)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            .frame(maxWidth: 420)
+
+            if scopeCompany {
+                if let company = appModel.openCompany?.node {
+                    Text(company.slug)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(L10n.usageOpenCompanyHint)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
+
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                DatePicker(L10n.usageFrom, selection: $rangeStart, displayedComponents: .date)
+                    .labelsHidden()
+                    .frame(maxWidth: 160)
+                Text("→").foregroundStyle(.secondary)
+                DatePicker(L10n.usageTo, selection: $rangeEnd, displayedComponents: .date)
+                    .labelsHidden()
+                    .frame(maxWidth: 160)
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                Text(L10n.usageFrom).font(.caption).foregroundStyle(.secondary)
+                Spacer().frame(width: 120)
+                Text(L10n.usageTo).font(.caption).foregroundStyle(.secondary)
+            }
+
+            Picker(L10n.usageBucket, selection: $bucket) {
+                Text(L10n.usageBucketDay).tag(UsageBucket.day)
+                Text(L10n.usageBucketWeek).tag(UsageBucket.week)
+                Text(L10n.usageBucketMonth).tag(UsageBucket.month)
+                Text(L10n.usageBucketYear).tag(UsageBucket.year)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 480)
+
+            Picker(L10n.usageWorktree, selection: $worktreeSelection) {
+                Text(L10n.usageWorktreeAll).tag("")
+                ForEach(report?.availableWorktrees ?? distinctWorktrees(), id: \.self) { wt in
+                    Text(wt).tag(wt)
+                }
+            }
+            .frame(maxWidth: 420)
+
+            HStack {
+                Button(L10n.usagePreset7d) { applyPreset(days: 7) }
+                Button(L10n.usagePreset30d) { applyPreset(days: 30) }
+                Button(L10n.usagePreset90d) { applyPreset(days: 90) }
+                Button(L10n.usagePresetAll) { applyAllDataRange() }
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var bucketTableTitle: String {
+        switch bucket {
+        case .day: return L10n.usageTableByDay
+        case .week: return L10n.usageTableByWeek
+        case .month: return L10n.usageTableByMonth
+        case .year: return L10n.usageTableByYear
         }
     }
 
     private func summaryCards(_ report: UsageReport) -> some View {
         HStack(spacing: 12) {
-            metricCard(L10n.usageAllTime, report.allTime.total)
-            metricCard(L10n.usageToday, report.today.total)
-            metricCard(L10n.usageEvents, report.eventCount)
+            metricCard(L10n.usageRangeTotal, report.rangeTotal.total)
+            metricCard(L10n.usageEvents, report.filteredCount)
+            metricCard(L10n.usageEventsLoaded, report.eventCount)
         }
     }
 
@@ -146,6 +222,11 @@ struct UsageView: View {
             Text(L10n.usageLedgerPaths)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if report.ledgerPaths.isEmpty {
+                Text(L10n.noneEmdash)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
             ForEach(report.ledgerPaths, id: \.path) { url in
                 Text(url.path)
                     .font(.caption2)
@@ -157,20 +238,72 @@ struct UsageView: View {
 
     private var schemaExample: String {
         """
-        # <company|holding>/cache/usage/events.jsonl
-        {"timestamp":"2026-09-18T10:00:00Z","company":"desk-garden-company","staff":"ceo","model":"grok","launch_mode":"grok","input_tokens":100,"output_tokens":20,"total_tokens":120}
-        {"timestamp":"2026-09-18T11:00:00Z","company":"desk-garden-company","staff":"ba-user","model":"claude","launch_mode":"merge","total_tokens":50}
+        # cache/usage/events.jsonl
+        {"timestamp":"2026-09-18T10:00:00Z","company":"desk-garden-company","staff":"ceo","worktree":"feat-x","model":"grok","launch_mode":"grok","total_tokens":120}
+        {"timestamp":"2026-09-18T11:00:00Z","company":"desk-garden-company","staff":"ba-user","worktree":"feat-x","model":"claude","launch_mode":"merge","total_tokens":50}
         """
     }
 
-    private func reload() {
+    private func reloadRaw() {
         let companyRoot = scopeCompany ? appModel.openCompany?.companyRoot : nil
         let slug = scopeCompany ? appModel.openCompany?.node.slug : nil
-        report = ledger.loadReport(
+        let loaded = ledger.loadRawEvents(
             holdingRoot: appModel.holdingPath,
             companyRoot: companyRoot,
             companySlug: slug
         )
+        rawEvents = loaded.events
+        ledgerPaths = loaded.paths
+        if let min = loaded.events.map(\.timestamp).min(),
+           let max = loaded.events.map(\.timestamp).max(),
+           rangeStart == Calendar.current.date(byAdding: .day, value: -30, to: Date()) {
+            // keep user range unless still default-ish; still ok to leave
+            _ = min
+            _ = max
+        }
+        // Drop worktree filter if no longer present
+        let wts = Set(loaded.events.compactMap(\.worktree).filter { !$0.isEmpty })
+        if !worktreeSelection.isEmpty, !wts.contains(worktreeSelection) {
+            worktreeSelection = ""
+        }
+        reaggregate()
+    }
+
+    private func reaggregate() {
+        let slug = scopeCompany ? (appModel.openCompany?.node.slug ?? "company") : "holding"
+        var start = rangeStart
+        var end = rangeEnd
+        if start > end { swap(&start, &end) }
+        let query = UsageQuery(
+            scopeCompany: scopeCompany,
+            worktree: worktreeSelection.isEmpty ? nil : worktreeSelection,
+            rangeStart: start,
+            rangeEnd: end,
+            bucket: bucket
+        )
+        report = ledger.report(
+            events: rawEvents,
+            ledgerPaths: ledgerPaths,
+            scopeLabel: slug,
+            query: query
+        )
+    }
+
+    private func applyPreset(days: Int) {
+        rangeEnd = Date()
+        rangeStart = Calendar.current.date(byAdding: .day, value: -days, to: rangeEnd) ?? rangeEnd
+    }
+
+    private func applyAllDataRange() {
+        if let min = rawEvents.map(\.timestamp).min(),
+           let max = rawEvents.map(\.timestamp).max() {
+            rangeStart = min
+            rangeEnd = max
+        }
+    }
+
+    private func distinctWorktrees() -> [String] {
+        Array(Set(rawEvents.compactMap(\.worktree).filter { !$0.isEmpty })).sorted()
     }
 
     private func token(_ row: UsagePeriodRow, _ model: String) -> String {
@@ -178,10 +311,7 @@ struct UsageView: View {
     }
 
     private func displayPeriod(_ label: String) -> String {
-        switch label {
-        case "all-time": return L10n.usageAllTime
-        case "today": return L10n.usageToday
-        default: return label
-        }
+        if label == "range" { return L10n.usageRangeTotal }
+        return label
     }
 }

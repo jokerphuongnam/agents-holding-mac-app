@@ -1,13 +1,9 @@
 import Foundation
 
-/// Reads usage ledgers from holding / company `cache/usage/`.
-///
-/// Expected files (any that exist are merged):
-/// - `cache/usage/events.jsonl` — one JSON object per line (`UsageEvent`)
-/// - `cache/usage/*.jsonl`
-/// - `cache/usage/usage.json` — single cumulative snapshot (optional)
+/// Reads usage ledgers and aggregates by date range, worktree, and bucket.
 struct UsageLedgerService {
     private let modelsOrder = ["grok", "claude", "codex", "merge", "other"]
+
     private let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
@@ -17,11 +13,11 @@ struct UsageLedgerService {
         return f
     }()
 
-    func loadReport(
+    func loadRawEvents(
         holdingRoot: URL?,
         companyRoot: URL?,
         companySlug: String?
-    ) -> UsageReport {
+    ) -> (events: [UsageEvent], paths: [URL]) {
         var paths: [URL] = []
         var events: [UsageEvent] = []
 
@@ -44,11 +40,97 @@ struct UsageLedgerService {
             }
         }
 
-        let scope = companySlug ?? "holding"
-        return aggregate(events: events, scopeLabel: scope, ledgerPaths: paths)
+        return (events, paths)
     }
 
-    // MARK: - Load
+    func report(
+        events allEvents: [UsageEvent],
+        ledgerPaths: [URL],
+        scopeLabel: String,
+        query: UsageQuery
+    ) -> UsageReport {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: query.rangeStart)
+        let endExclusive = cal.date(
+            byAdding: .day,
+            value: 1,
+            to: cal.startOfDay(for: query.rangeEnd)
+        ) ?? query.rangeEnd
+
+        let dataStart = allEvents.map(\.timestamp).min()
+        let dataEnd = allEvents.map(\.timestamp).max()
+
+        var worktrees = Set(allEvents.compactMap { $0.worktree }.filter { !$0.isEmpty })
+        worktrees = Set(worktrees.map { $0 })
+
+        var filtered = allEvents.filter { $0.timestamp >= start && $0.timestamp < endExclusive }
+        if let wt = query.worktree, !wt.isEmpty {
+            filtered = filtered.filter { ($0.worktree ?? "") == wt }
+        }
+
+        let rangeTotal = periodRow(label: "range", events: filtered)
+        let buckets = bucketRows(events: filtered, bucket: query.bucket, calendar: cal)
+
+        return UsageReport(
+            scopeLabel: scopeLabel,
+            eventCount: allEvents.count,
+            filteredCount: filtered.count,
+            availableWorktrees: worktrees.sorted(),
+            dataStart: dataStart,
+            dataEnd: dataEnd,
+            rangeTotal: rangeTotal,
+            buckets: buckets,
+            ledgerPaths: ledgerPaths
+        )
+    }
+
+    // MARK: - Bucketing
+
+    private func bucketRows(events: [UsageEvent], bucket: UsageBucket, calendar: Calendar) -> [UsagePeriodRow] {
+        var map: [String: [UsageEvent]] = [:]
+        for e in events {
+            let key = bucketKey(for: e.timestamp, bucket: bucket, calendar: calendar)
+            map[key, default: []].append(e)
+        }
+        return map.keys.sorted(by: >).map { periodRow(label: $0, events: map[$0] ?? []) }
+    }
+
+    private func bucketKey(for date: Date, bucket: UsageBucket, calendar: Calendar) -> String {
+        switch bucket {
+        case .day:
+            return dayFormatter.string(from: date)
+        case .week:
+            let week = calendar.component(.weekOfYear, from: date)
+            let year = calendar.component(.yearForWeekOfYear, from: date)
+            return String(format: "%04d-W%02d", year, week)
+        case .month:
+            let comps = calendar.dateComponents([.year, .month], from: date)
+            return String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)
+        case .year:
+            let year = calendar.component(.year, from: date)
+            return String(format: "%04d", year)
+        }
+    }
+
+    private func periodRow(label: String, events: [UsageEvent]) -> UsagePeriodRow {
+        var buckets: [String: Int] = [:]
+        var total = 0
+        for e in events {
+            total += e.totalTokens
+            buckets[e.model, default: 0] += e.totalTokens
+        }
+        let ensured: [UsageModelBreakdown] = ["grok", "claude", "codex"].map { m in
+            UsageModelBreakdown(model: m, tokens: buckets[m] ?? 0)
+        } + modelsOrder
+            .filter { !["grok", "claude", "codex"].contains($0) }
+            .compactMap { m in
+                let n = buckets[m] ?? 0
+                return n > 0 ? UsageModelBreakdown(model: m, tokens: n) : nil
+            }
+        return UsagePeriodRow(label: label, total: total, byModel: ensured)
+    }
+
+    // MARK: - Load files
 
     private func holdingPackage(from holdingRoot: URL) -> URL {
         let nested = holdingRoot.appendingPathComponent("holding")
@@ -85,7 +167,6 @@ struct UsageLedgerService {
             }
         }
 
-        // Single usage.json snapshot → one synthetic event (today / file mtime).
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return []
         }
@@ -100,6 +181,7 @@ struct UsageLedgerService {
                 timestamp: mtime,
                 company: defaultCompany ?? stringValue(obj["company"]),
                 staff: stringValue(obj["role"]) ?? stringValue(obj["staff"]),
+                worktree: stringValue(obj["worktree"]),
                 model: model,
                 launchMode: stringValue(obj["launch_mode"]),
                 inputTokens: input,
@@ -119,54 +201,5 @@ struct UsageLedgerService {
     private func stringValue(_ any: Any?) -> String? {
         if let s = any as? String, !s.isEmpty { return s }
         return nil
-    }
-
-    // MARK: - Aggregate
-
-    private func aggregate(events: [UsageEvent], scopeLabel: String, ledgerPaths: [URL]) -> UsageReport {
-        let cal = Calendar.current
-        let todayKey = dayFormatter.string(from: Date())
-
-        let allTime = periodRow(label: "all-time", events: events)
-        let todayEvents = events.filter { dayFormatter.string(from: $0.timestamp) == todayKey }
-        let today = periodRow(label: "today", events: todayEvents)
-
-        var byDayMap: [String: [UsageEvent]] = [:]
-        for e in events {
-            let k = dayFormatter.string(from: e.timestamp)
-            byDayMap[k, default: []].append(e)
-        }
-        let byDay = byDayMap.keys.sorted(by: >).map { key in
-            periodRow(label: key, events: byDayMap[key] ?? [])
-        }
-
-        return UsageReport(
-            scopeLabel: scopeLabel,
-            eventCount: events.count,
-            allTime: allTime,
-            today: today,
-            byDay: byDay,
-            ledgerPaths: ledgerPaths
-        )
-    }
-
-    private func periodRow(label: String, events: [UsageEvent]) -> UsagePeriodRow {
-        var buckets: [String: Int] = [:]
-        var total = 0
-        for e in events {
-            total += e.totalTokens
-            buckets[e.model, default: 0] += e.totalTokens
-        }
-        let breakdown = modelsOrder.compactMap { model -> UsageModelBreakdown? in
-            let n = buckets[model] ?? 0
-            guard n > 0 || modelsOrder.prefix(3).contains(model) else { return nil }
-            return UsageModelBreakdown(model: model, tokens: n)
-        }
-        // Always show grok/claude/codex columns even if 0
-        let ensured: [UsageModelBreakdown] = ["grok", "claude", "codex"].map { m in
-            UsageModelBreakdown(model: m, tokens: buckets[m] ?? 0)
-        } + breakdown.filter { !["grok", "claude", "codex"].contains($0.model) && $0.tokens > 0 }
-
-        return UsagePeriodRow(label: label, total: total, byModel: ensured)
     }
 }

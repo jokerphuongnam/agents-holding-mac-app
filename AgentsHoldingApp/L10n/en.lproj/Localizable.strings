@@ -86,22 +86,42 @@
 
 /* Usage */
 "usage_placeholder" = "Token stats by staff / model / worktree / day·month — plan P4. Merge traffic attributes to the resolved model.";
-"usage_help" = "Totals since company/holding ledger began, today, and each day — with grok / claude / codex columns.";
+"usage_help" = "Filter by date range, worktree, and bucket (day/week/month/year). Tables break down grok / claude / codex.";
 "usage_scope" = "Scope";
 "usage_scope_holding" = "Holding";
 "usage_scope_company" = "Open company";
 "usage_all_time" = "All time";
 "usage_today" = "Today";
-"usage_events" = "Events";
-"usage_table_summary" = "Summary";
+"usage_events" = "Filtered events";
+"usage_events_loaded" = "Loaded events";
+"usage_table_summary" = "Range total";
 "usage_table_by_day" = "By day";
+"usage_table_by_week" = "By week";
+"usage_table_by_month" = "By month";
+"usage_table_by_year" = "By year";
 "usage_col_period" = "Period";
 "usage_col_total" = "Total";
-"usage_no_rows" = "No rows";
+"usage_no_rows" = "No rows for this filter";
 "usage_empty_title" = "No usage ledger yet";
 "usage_empty_body" = "Write events to cache/usage/events.jsonl under the holding or company. Until then this table stays empty.";
 "usage_schema_help" = "Expected schema (JSONL, one event per line):";
 "usage_ledger_paths" = "Ledger files loaded:";
+"usage_filters" = "Filters";
+"usage_from" = "From";
+"usage_to" = "To";
+"usage_bucket" = "Bucket";
+"usage_bucket_day" = "Day";
+"usage_bucket_week" = "Week";
+"usage_bucket_month" = "Month";
+"usage_bucket_year" = "Year";
+"usage_worktree" = "Worktree";
+"usage_worktree_all" = "All worktrees";
+"usage_open_company_hint" = "Open a company to filter company-scoped usage.";
+"usage_preset_7d" = "7d";
+"usage_preset_30d" = "30d";
+"usage_preset_90d" = "90d";
+"usage_preset_all" = "All data";
+"usage_range_total" = "In range";
 
 /* Settings */
 "holding_path" = "Holding path";
