@@ -4,20 +4,32 @@ macOS **SwiftUI** mission-control UI for [agents-holding](../agents-holding) (Pa
 
 Sibling of `agents-holding` under `Documents/Agents/` — **not** inside the holding git tree.
 
-## Install
+## Install (prebuilt DMG)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 ```
 
-Clones/updates into `~/Documents/Agents/agents-holding-mac-app`, runs `Scripts/generate.sh` (SwiftGen + XcodeGen via SPM), then opens Xcode.
-
-Re-run the same command anytime after you push updates.
+Downloads **`AgentsHolding-mac.dmg`** from the latest [GitHub Release](https://github.com/jokerphuongnam/agents-holding-mac-app/releases), installs the `.app` into `~/Applications`, and launches it — **no clone, no local build**.
 
 ```bash
-curl -fsSL …/install.sh | bash -s -- --dest ~/Documents/Agents/agents-holding-mac-app
-curl -fsSL …/install.sh | bash -s -- --from-local /path/to/clone
+curl -fsSL …/install.sh | bash -s -- --tag v0.1.0
+curl -fsSL …/install.sh | bash -s -- --dir /Applications
 curl -fsSL …/install.sh | bash -s -- --no-open
+```
+
+### Publish a DMG (maintainers)
+
+```bash
+./Scripts/package-dmg.sh          # → dist/AgentsHolding-mac.dmg
+gh release create v0.1.0 dist/AgentsHolding-mac.dmg --title "v0.1.0"
+```
+
+### Dev from source
+
+```bash
+git clone git@github.com:jokerphuongnam/agents-holding-mac-app.git
+cd agents-holding-mac-app && ./Scripts/generate.sh && open AgentsHoldingApp.xcodeproj
 ```
 
 ## Plan

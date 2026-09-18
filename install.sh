@@ -2,43 +2,42 @@
 # One-line install (recommended):
 #   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 #
-# Clones/updates this repo → runs Scripts/generate.sh (SwiftGen + XcodeGen via SPM).
-# Requires: git, swift (Xcode). No Homebrew.
+# Downloads the prebuilt DMG from GitHub Releases and installs the .app —
+# no clone, no SwiftGen/XcodeGen, no local compile.
 set -euo pipefail
 
-# When piped via curl|bash, keep git/other tools from consuming stdin.
 exec </dev/null
 
-REPO_URL="${AGENTS_HOLDING_MAC_REPO:-https://github.com/jokerphuongnam/agents-holding-mac-app.git}"
-REPO_REF="${AGENTS_HOLDING_MAC_REF:-main}"
-DEST="${AGENTS_HOLDING_MAC_DEST:-$HOME/Documents/Agents/agents-holding-mac-app}"
-FROM_LOCAL=""
-OPEN_XCODE=1
-SKIP_GENERATE=0
+REPO="${AGENTS_HOLDING_MAC_REPO:-jokerphuongnam/agents-holding-mac-app}"
+ASSET_NAME="${AGENTS_HOLDING_MAC_DMG:-AgentsHolding-mac.dmg}"
+TAG="${AGENTS_HOLDING_MAC_TAG:-latest}" # latest | v0.1.0
+INSTALL_DIR="${AGENTS_HOLDING_MAC_APP_DIR:-$HOME/Applications}"
+OPEN_APP=1
+KEEP_DMG=0
 
 usage() {
   cat <<'USAGE'
-Install agents-holding-mac-app (SwiftUI mission control).
+Install prebuilt Agents Holding macOS app from GitHub Releases.
 
   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 
-Options (with bash -s):
-  curl -fsSL …/install.sh | bash -s -- --dest ~/Documents/Agents/agents-holding-mac-app
-  curl -fsSL …/install.sh | bash -s -- --ref main
-  curl -fsSL …/install.sh | bash -s -- --from-local /path/to/agents-holding-mac-app
-  curl -fsSL …/install.sh | bash -s -- --no-open
-  curl -fsSL …/install.sh | bash -s -- --skip-generate
+Options (bash -s):
+  --tag v0.1.0          Release tag (default: latest)
+  --asset NAME.dmg      Asset filename (default: AgentsHolding-mac.dmg)
+  --dir ~/Applications  Install directory (default: ~/Applications)
+  --no-open             Do not launch the app after install
+  --keep-dmg            Keep downloaded DMG in ~/Downloads
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dest) DEST="${2:-}"; shift 2 ;;
-    --repo) REPO_URL="${2:-}"; shift 2 ;;
-    --ref) REPO_REF="${2:-}"; shift 2 ;;
-    --from-local) FROM_LOCAL="${2:-}"; shift 2 ;;
-    --no-open) OPEN_XCODE=0; shift ;;
-    --skip-generate) SKIP_GENERATE=1; shift ;;
+    --tag) TAG="${2:-}"; shift 2 ;;
+    --asset) ASSET_NAME="${2:-}"; shift 2 ;;
+    --dir) INSTALL_DIR="${2:-}"; shift 2 ;;
+    --repo) REPO="${2:-}"; shift 2 ;;
+    --no-open) OPEN_APP=0; shift ;;
+    --keep-dmg) KEEP_DMG=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown arg: $1" >&2; usage; exit 2 ;;
   esac
@@ -51,65 +50,98 @@ need_cmd() {
   }
 }
 
-need_cmd git
-need_cmd swift
+need_cmd curl
+need_cmd hdiutil
+need_cmd ditto
 
-resolve_pkg() {
-  local root="$1"
-  [[ -f "$root/Scripts/generate.sh" && -f "$root/project.yml" && -f "$root/swiftgen.yml" ]] || return 1
-  echo "$root"
+api_url() {
+  if [[ "$TAG" == "latest" ]]; then
+    echo "https://api.github.com/repos/${REPO}/releases/latest"
+  else
+    echo "https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
+  fi
 }
 
-PKG=""
-if [[ -n "$FROM_LOCAL" ]]; then
-  FROM_LOCAL="$(cd "$FROM_LOCAL" && pwd)"
-  PKG="$(resolve_pkg "$FROM_LOCAL" || true)"
-  [[ -n "$PKG" ]] || {
-    echo "error: --from-local is not agents-holding-mac-app: $FROM_LOCAL" >&2
-    exit 1
-  }
-  DEST="$PKG"
-  echo "[install] source=local $PKG"
-else
-  mkdir -p "$(dirname "$DEST")"
-  if [[ -d "$DEST/.git" ]]; then
-    echo "[install] updating $DEST ($REPO_REF)"
-    git -C "$DEST" remote set-url origin "$REPO_URL" 2>/dev/null || true
-    git -C "$DEST" fetch --depth 1 origin "$REPO_REF"
-    git -C "$DEST" checkout -q "$REPO_REF" 2>/dev/null || git -C "$DEST" checkout -q -B "$REPO_REF" "origin/$REPO_REF"
-    git -C "$DEST" reset --hard "origin/$REPO_REF"
-  else
-    echo "[install] cloning $REPO_URL ($REPO_REF) → $DEST"
-    rm -rf "$DEST"
-    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$DEST"
-  fi
-  PKG="$(resolve_pkg "$DEST" || true)"
-  [[ -n "$PKG" ]] || {
-    echo "error: tree missing Scripts/generate.sh + project.yml: $DEST" >&2
-    exit 1
-  }
-  echo "[install] source=git $(git -C "$DEST" rev-parse --short HEAD)"
+echo "[install] fetching release metadata ($TAG)…"
+META="$(curl -fsSL "$(api_url)")" || {
+  echo "error: could not fetch release from GitHub ($REPO $TAG)." >&2
+  echo "       Publish a Release with asset $ASSET_NAME first:" >&2
+  echo "         ./Scripts/package-dmg.sh && gh release create v0.1.0 dist/$ASSET_NAME" >&2
+  exit 1
+}
+
+DMG_URL=""
+if command -v python3 >/dev/null 2>&1; then
+  DMG_URL="$(
+    printf '%s' "$META" | python3 -c '
+import json, sys
+asset = sys.argv[1]
+data = json.load(sys.stdin)
+for a in data.get("assets") or []:
+    if a.get("name") == asset:
+        print(a.get("browser_download_url") or "")
+        break
+' "$ASSET_NAME" 2>/dev/null || true
+  )"
+fi
+if [[ -z "$DMG_URL" ]]; then
+  DMG_URL="$(printf '%s' "$META" | grep -oE "https://[^\"]+/${ASSET_NAME//./\\.}" | head -1 || true)"
 fi
 
-if [[ "$SKIP_GENERATE" -eq 0 ]]; then
-  echo "[install] generate (SwiftGen + XcodeGen via SPM)…"
-  bash "$PKG/Scripts/generate.sh"
-else
-  echo "[install] skip generate"
+if [[ -z "$DMG_URL" ]]; then
+  echo "error: asset '$ASSET_NAME' not found on release $TAG" >&2
+  echo "       Upload $ASSET_NAME to https://github.com/${REPO}/releases" >&2
+  exit 1
 fi
 
-XCODEPROJ="$PKG/AgentsHoldingApp.xcodeproj"
-if [[ "$OPEN_XCODE" -eq 1 ]]; then
-  if [[ -d "$XCODEPROJ" ]] && command -v open >/dev/null 2>&1; then
-    echo "[install] opening Xcode…"
-    open "$XCODEPROJ"
-  else
-    echo "[install] open manually: open $XCODEPROJ"
+TMPDIR_DL="$(mktemp -d "${TMPDIR:-/tmp}/agents-holding-mac.XXXXXX")"
+DMG_PATH="$TMPDIR_DL/$ASSET_NAME"
+cleanup() {
+  if [[ "$KEEP_DMG" -eq 1 ]]; then
+    mkdir -p "$HOME/Downloads"
+    cp -f "$DMG_PATH" "$HOME/Downloads/$ASSET_NAME" 2>/dev/null || true
+    echo "[install] kept DMG → ~/Downloads/$ASSET_NAME"
   fi
+  # detach any leftover mount
+  if [[ -n "${MOUNT_POINT:-}" && -d "$MOUNT_POINT" ]]; then
+    hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
+  fi
+  rm -rf "$TMPDIR_DL"
+}
+trap cleanup EXIT
+
+echo "[install] downloading $DMG_URL"
+curl -fL --progress-bar -o "$DMG_PATH" "$DMG_URL"
+
+echo "[install] mounting DMG…"
+ATTACH_OUT="$(hdiutil attach "$DMG_PATH" -nobrowse -readonly)"
+MOUNT_POINT="$(printf '%s\n' "$ATTACH_OUT" | awk -F'\t' '/\/Volumes\//{print $NF; exit}')"
+if [[ -z "$MOUNT_POINT" || ! -d "$MOUNT_POINT" ]]; then
+  echo "error: could not mount DMG" >&2
+  exit 1
+fi
+
+APP_SRC="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' -type d | head -1)"
+if [[ -z "$APP_SRC" ]]; then
+  echo "error: no .app inside DMG ($MOUNT_POINT)" >&2
+  exit 1
+fi
+APP_NAME="$(basename "$APP_SRC")"
+
+mkdir -p "$INSTALL_DIR"
+DEST_APP="$INSTALL_DIR/$APP_NAME"
+echo "[install] installing → $DEST_APP"
+rm -rf "$DEST_APP"
+ditto "$APP_SRC" "$DEST_APP"
+
+hdiutil detach "$MOUNT_POINT" -quiet || true
+MOUNT_POINT=""
+
+if [[ "$OPEN_APP" -eq 1 ]]; then
+  echo "[install] launching…"
+  open "$DEST_APP"
 fi
 
 echo
-echo "[install] done → $PKG"
-echo "  open $XCODEPROJ"
-echo "  # re-run anytime:"
-echo "  curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash"
+echo "[install] done → $DEST_APP"
+echo "  Re-run: curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash"

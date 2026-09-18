@@ -23,6 +23,10 @@ BuildTools/.swiftpm/
 AgentsHoldingApp/Generated/
 **/Generated/
 
+# Release artifacts (upload DMG to GitHub Releases, do not commit)
+dist/
+build/
+
 # Secrets
 *.pem
 .env
