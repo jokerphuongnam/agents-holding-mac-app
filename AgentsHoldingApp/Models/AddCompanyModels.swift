@@ -16,30 +16,50 @@ struct LibrarySkill: Identifiable, Hashable {
     var target: String
 }
 
-struct NewSkillDraft: Identifiable, Hashable {
-    var id: String = UUID().uuidString
-    var skillID: String = ""
-    var title: String = ""
-    var body: String = ""
-}
+/// Editable roster row (template or newly added).
+struct StaffDraft: Identifiable, Hashable {
+    var id: String { name }
+    var name: String
+    var team: String
+    var blurb: String
+    var isTemplate: Bool
+    var isNew: Bool
+    var description: String
+    var selectedSkillIDs: Set<String>
+    var allowPaths: [String]
+    var tier: String
+    var lead: String
 
-struct CustomStaffDraft: Identifiable, Hashable {
-    var id: String = UUID().uuidString
-    var name: String = ""
-    var team: String = "custom"
-    var description: String = ""
-    var tier: String = "medium"
-    var lead: String = "ceo"
-    var selectedSkillIDs: Set<String> = []
-    var newSkills: [NewSkillDraft] = []
+    static func fromTemplate(_ t: TemplateStaff) -> StaffDraft {
+        StaffDraft(
+            name: t.name,
+            team: t.team,
+            blurb: t.blurb,
+            isTemplate: true,
+            isNew: false,
+            description: t.blurb,
+            selectedSkillIDs: [],
+            allowPaths: [],
+            tier: t.name.hasSuffix("-lead") || t.name == "ceo" || t.name == "cto" ? "dispatch" : "medium",
+            lead: t.name == "ceo" ? "" : "ceo"
+        )
+    }
 }
 
 struct RosterSpec: Encodable {
     var keep_staffs: [String]
     var custom_staffs: [CustomStaffSpec]
     var extra_skill_ids: [String]
-    /// staff name → allowed project-relative (or absolute) paths
     var staff_path_fences: [String: [String]]
+    var staff_configs: [String: StaffConfigSpec]
+
+    struct StaffConfigSpec: Encodable {
+        var skill_ids: [String]
+        var paths: [String]
+        var description: String
+        var tier: String
+        var lead: String
+    }
 
     struct CustomStaffSpec: Encodable {
         var name: String
@@ -48,6 +68,7 @@ struct RosterSpec: Encodable {
         var tier: String
         var lead: String
         var skill_ids: [String]
+        var paths: [String]
         var new_skills: [NewSkillSpec]
     }
 

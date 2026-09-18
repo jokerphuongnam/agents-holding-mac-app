@@ -1,37 +1,36 @@
 import SwiftUI
 
-/// Add company: pick folder → choose staffs from templates → choose skills from library.
-/// No blank “invent staff/skill” forms — catalog only (less guesswork, more consistent SoT).
+/// Add company wizard — catalog-first roster with per-staff editor.
 struct AddCompanySheet: View {
     @EnvironmentObject private var appModel: AppModel
     @Environment(\.dismiss) private var dismiss
 
     enum Step: Int, CaseIterable {
         case folder = 0
-        case staffs = 1
-        case skills = 2
-        case paths = 3
-        case confirm = 4
+        case roster = 1
+        case confirm = 2
     }
 
     @State private var step: Step = .folder
     @State private var projectRootPath: String = ""
     @State private var name: String = ""
     @State private var budget: String = "medium"
-    @State private var registerOnly: Bool = false
-    @State private var existingHint: String = ""
+    @State private var registerOnly = false
+    @State private var modeHint: String = ""
 
-    @State private var templateStaffs: [TemplateStaff] = []
+    @State private var templateCatalog: [TemplateStaff] = []
     @State private var librarySkills: [LibrarySkill] = []
-    @State private var selectedStaffs: Set<String> = []
-    @State private var selectedSkillIDs: Set<String> = []
-    @State private var skillFilter: String = ""
-    /// staff name → allowed paths (project-relative when possible)
-    @State private var staffPathFences: [String: [String]] = [:]
-    @State private var pathsFocusStaff: String = "ceo"
+    @State private var roster: [StaffDraft] = []
+    @State private var editingStaffName: String?
+
+    @State private var showAddFromTemplate = false
+    @State private var showAddNewStaff = false
+    @State private var newStaffName = ""
+    @State private var newStaffTeam = "custom"
+    @State private var newStaffDescription = ""
 
     @State private var isWorking = false
-    @State private var log: String = ""
+    @State private var log = ""
     @State private var localError: String?
 
     private let budgets = ["low", "medium", "high"]
@@ -43,13 +42,32 @@ struct AddCompanySheet: View {
             header
             Divider()
             ScrollView {
-                stepBody
-                    .padding(20)
+                stepBody.padding(20)
             }
             Divider()
             footer
         }
-        .frame(width: 720, height: 560)
+        .frame(width: 760, height: 600)
+        .sheet(isPresented: Binding(
+            get: { editingStaffName != nil },
+            set: { if !$0 { editingStaffName = nil } }
+        )) {
+            if let staffName = editingStaffName,
+               let idx = roster.firstIndex(where: { $0.name == staffName }) {
+                StaffEditorSheet(
+                    draft: $roster[idx],
+                    librarySkills: librarySkills,
+                    projectRootPath: projectRootPath,
+                    installer: installer
+                )
+            }
+        }
+        .sheet(isPresented: $showAddFromTemplate) {
+            addFromTemplateSheet
+        }
+        .sheet(isPresented: $showAddNewStaff) {
+            addNewStaffSheet
+        }
         .onAppear {
             loadCatalog()
             if projectRootPath.isEmpty { browse() }
@@ -80,10 +98,8 @@ struct AddCompanySheet: View {
     private var stepTitle: String {
         switch step {
         case .folder: return "1 · Folder & slug"
-        case .staffs: return "2 · Chọn staffs từ template"
-        case .skills: return "3 · Chọn skills từ library"
-        case .paths: return "4 · Path fence (browse files/folders)"
-        case .confirm: return "5 · Confirm"
+        case .roster: return "2 · Staffs (leading) — bấm staff để skills / access / description"
+        case .confirm: return "3 · Confirm"
         }
     }
 
@@ -91,22 +107,20 @@ struct AddCompanySheet: View {
     private var stepBody: some View {
         switch step {
         case .folder: folderStep
-        case .staffs: staffsStep
-        case .skills: skillsStep
-        case .paths: pathsStep
+        case .roster: rosterStep
         case .confirm: confirmStep
         }
     }
 
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Chọn folder project. Roster chỉ lấy từ template/library — không tự chế staff/skill trống.")
+            Text("Chọn folder project. App tự hiểu: đã có `.agents/*-company` → register; chưa có → create-company.")
                 .foregroundStyle(.secondary)
             HStack(alignment: .top) {
                 Text(projectRootPath.isEmpty ? "Chưa chọn folder" : projectRootPath)
                     .font(.system(.body, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                Spacer()
                 Button("Browse…") { browse() }
             }
             TextField("Company name (slug)", text: $name)
@@ -115,156 +129,101 @@ struct AddCompanySheet: View {
                 ForEach(budgets, id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.segmented)
-            Toggle("Chỉ register (đã có Company OS)", isOn: $registerOnly)
-            if !existingHint.isEmpty {
-                Text(existingHint).font(.caption).foregroundStyle(.secondary)
+            if !modeHint.isEmpty {
+                Text(modeHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    private var staffsStep: some View {
+    private var rosterStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Chỉ staffs có sẵn trong `templates/company/system/staffs`. `ceo` bắt buộc. Không invent role mới ở bước này.")
+            Text("Danh sách staff leading-aligned. Bấm một dòng để chọn skills (library), access (browse), description. Staff mới: skills gắn đúng staff đó.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack {
-                Button("Recommended") {
-                    selectedStaffs = Set(templateStaffs.filter(\.recommended).map(\.name) + ["ceo"])
-                }
-                Button("All templates") {
-                    selectedStaffs = Set(templateStaffs.map(\.name))
-                }
-                Button("Only ceo") {
-                    selectedStaffs = ["ceo"]
-                }
-            }
-            .buttonStyle(.borderless)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            let grouped = Dictionary(grouping: templateStaffs, by: \.team)
-            ForEach(grouped.keys.sorted(), id: \.self) { team in
-                DisclosureGroup("\(team) · \((grouped[team] ?? []).count)") {
-                    ForEach(grouped[team] ?? []) { staff in
-                        Toggle(isOn: binding(forStaff: staff.name)) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(staff.name).fontWeight(.semibold)
-                                    if staff.recommended {
-                                        Text("recommended")
+            HStack {
+                Button {
+                    showAddFromTemplate = true
+                } label: {
+                    Label("Add from template", systemImage: "plus.rectangle.on.folder")
+                }
+                Button {
+                    newStaffName = ""
+                    newStaffTeam = "custom"
+                    newStaffDescription = ""
+                    showAddNewStaff = true
+                } label: {
+                    Label("Add new staff", systemImage: "person.badge.plus")
+                }
+                Spacer()
+                Button("Recommended set") { applyRecommended() }
+                    .buttonStyle(.borderless)
+            }
+
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(roster) { staff in
+                    Button {
+                        editingStaffName = staff.name
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: staff.isNew ? "person.crop.circle.badge.plus" : "person.fill")
+                                .foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text(staff.name)
+                                        .fontWeight(.semibold)
+                                    Text(staff.team)
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1)
+                                        .background(.quaternary, in: Capsule())
+                                    if staff.isNew {
+                                        Text("new")
                                             .font(.caption2)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 1)
-                                            .background(.quaternary, in: Capsule())
+                                            .foregroundStyle(.orange)
                                     }
                                 }
-                                Text(staff.blurb)
+                                Text(staff.description.isEmpty ? staff.blurb : staff.description)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                HStack(spacing: 10) {
+                                    Label("\(staff.selectedSkillIDs.count) skills", systemImage: "book")
+                                    Label("\(staff.allowPaths.count) paths", systemImage: "folder")
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
                             }
+                            Spacer(minLength: 0)
+                            if staff.name != "ceo" {
+                                Button(role: .destructive) {
+                                    roster.removeAll { $0.name == staff.name }
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.tertiary)
                         }
-                        .disabled(staff.name == "ceo")
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    Divider()
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
         }
-    }
-
-    private var filteredSkills: [LibrarySkill] {
-        let q = skillFilter.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if q.isEmpty { return librarySkills }
-        return librarySkills.filter {
-            $0.id.lowercased().contains(q)
-                || $0.target.lowercased().contains(q)
-                || $0.tags.contains { $0.lowercased().contains(q) }
-        }
-    }
-
-    private var skillsStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Skills chỉ lấy từ `templates/skills-library` (MANIFEST). Không tạo skill trống — muốn skill mới thì thêm vào library/holding trước.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("Filter skills…", text: $skillFilter)
-                .textFieldStyle(.roundedBorder)
-            HStack {
-                Button("Clear skills") { selectedSkillIDs = [] }
-                Text("\(selectedSkillIDs.count) selected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.borderless)
-
-            ForEach(filteredSkills) { skill in
-                Toggle(isOn: binding(forSkill: skill.id)) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(skill.id).fontWeight(.semibold)
-                        Text("\(skill.path)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                        Text("target: \(skill.target.isEmpty ? "—" : skill.target) · tags: \(skill.tags.prefix(6).joined(separator: ", "))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-    }
-
-    private var pathsStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Với mỗi staff đã chọn, Browse để allow file/folder được làm việc. Path ưu tiên relative tới project folder. Có thể để trống (chưa fence).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Picker("Staff", selection: $pathsFocusStaff) {
-                ForEach(selectedStaffs.sorted(), id: \.self) { Text($0).tag($0) }
-            }
-
-            let paths = staffPathFences[pathsFocusStaff] ?? []
-            HStack {
-                Button("Browse allow…") { browseAllowPaths(for: pathsFocusStaff) }
-                Button("Clear") {
-                    staffPathFences[pathsFocusStaff] = []
-                }
-                .disabled(paths.isEmpty)
-            }
-
-            if paths.isEmpty {
-                Text("Chưa gán path — staff này chưa có fence từ wizard.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(paths, id: \.self) { path in
-                    HStack {
-                        Text(path)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                        Spacer()
-                        Button(role: .destructive) {
-                            staffPathFences[pathsFocusStaff] = paths.filter { $0 != path }
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
-            }
-
-            Divider()
-            Text("Tóm tắt fences")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ForEach(selectedStaffs.sorted(), id: \.self) { staff in
-                let n = staffPathFences[staff]?.count ?? 0
-                Text("\(staff): \(n == 0 ? "—" : "\(n) path(s)")")
-                    .font(.caption)
-            }
-        }
-        .onAppear {
-            if !selectedStaffs.contains(pathsFocusStaff) {
-                pathsFocusStaff = selectedStaffs.sorted().first ?? "ceo"
-            }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var confirmStep: some View {
@@ -272,18 +231,12 @@ struct AddCompanySheet: View {
             labeled("Folder", projectRootPath)
             labeled("Slug", name)
             labeled("Budget", budget)
-            labeled("Mode", registerOnly ? "Register + apply roster" : "create-company + apply roster")
-            labeled("Staffs (template)", selectedStaffs.sorted().joined(separator: ", "))
+            labeled("Mode", registerOnly ? "Auto: register existing Company OS" : "Auto: create-company")
             labeled(
-                "Skills (library)",
-                selectedSkillIDs.isEmpty ? "— (none extra)" : selectedSkillIDs.sorted().joined(separator: ", ")
-            )
-            labeled(
-                "Path fences",
-                selectedStaffs.sorted().map { staff in
-                    let paths = staffPathFences[staff] ?? []
-                    return paths.isEmpty ? "\(staff): —" : "\(staff): \(paths.joined(separator: ", "))"
-                }.joined(separator: " | ")
+                "Staffs",
+                roster.map {
+                    "\($0.name)[\($0.selectedSkillIDs.count)sk,\($0.allowPaths.count)path]"
+                }.joined(separator: ", ")
             )
             if let localError {
                 Text(localError).foregroundStyle(.red).font(.caption)
@@ -295,11 +248,96 @@ struct AddCompanySheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
-                .frame(maxHeight: 180)
+                .frame(maxHeight: 200)
                 .padding(8)
                 .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var addFromTemplateSheet: some View {
+        let existing = Set(roster.map(\.name))
+        let available = templateCatalog.filter { !existing.contains($0.name) }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Add staff from template")
+                .font(.headline)
+            Text("Chỉ catalog holding — không invent.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if available.isEmpty {
+                Text("Mọi template staff đã có trong roster.")
+                    .foregroundStyle(.secondary)
+            } else {
+                List(available) { staff in
+                    Button {
+                        roster.append(.fromTemplate(staff))
+                        roster.sort { $0.name < $1.name }
+                        showAddFromTemplate = false
+                        editingStaffName = staff.name
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(staff.name).fontWeight(.semibold)
+                            Text("\(staff.team) · \(staff.blurb)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Close") { showAddFromTemplate = false }
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 420)
+    }
+
+    private var addNewStaffSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add new staff")
+                .font(.headline)
+            Text("Bắt buộc description. Sau đó mở editor để gắn skills library + access paths cho đúng staff này.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("name (slug)", text: $newStaffName)
+            TextField("team", text: $newStaffTeam)
+            TextEditor(text: $newStaffDescription)
+                .frame(minHeight: 100)
+                .border(Color.secondary.opacity(0.2))
+            HStack {
+                Spacer()
+                Button("Cancel") { showAddNewStaff = false }
+                Button("Add") {
+                    let n = newStaffName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    guard !n.isEmpty, !roster.contains(where: { $0.name == n }) else { return }
+                    let draft = StaffDraft(
+                        name: n,
+                        team: newStaffTeam.trimmingCharacters(in: .whitespaces).isEmpty ? "custom" : newStaffTeam,
+                        blurb: newStaffDescription,
+                        isTemplate: false,
+                        isNew: true,
+                        description: newStaffDescription,
+                        selectedSkillIDs: [],
+                        allowPaths: [],
+                        tier: "medium",
+                        lead: "ceo"
+                    )
+                    roster.append(draft)
+                    roster.sort { $0.name < $1.name }
+                    showAddNewStaff = false
+                    editingStaffName = n
+                }
+                .disabled(
+                    newStaffName.trimmingCharacters(in: .whitespaces).isEmpty
+                        || newStaffDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 360)
     }
 
     private var footer: some View {
@@ -307,12 +345,16 @@ struct AddCompanySheet: View {
             Button("Cancel") { dismiss() }
             Spacer()
             if step != .folder {
-                Button("Back") { goBack() }
+                Button("Back") {
+                    if let prev = Step(rawValue: step.rawValue - 1) { step = prev }
+                }
             }
             if step != .confirm {
-                Button("Next") { goNext() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canAdvance)
+                Button("Next") {
+                    if let next = Step(rawValue: step.rawValue + 1) { step = next }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canAdvance)
             } else {
                 Button(isWorking ? "Working…" : "Install") {
                     Task { await install() }
@@ -328,25 +370,11 @@ struct AddCompanySheet: View {
         switch step {
         case .folder:
             return !projectRootPath.isEmpty && !name.trimmingCharacters(in: .whitespaces).isEmpty
-        case .staffs:
-            return selectedStaffs.contains("ceo")
-        case .skills, .paths, .confirm:
+        case .roster:
+            return roster.contains(where: { $0.name == "ceo" })
+        case .confirm:
             return true
         }
-    }
-
-    private func browseAllowPaths(for staff: String) {
-        let root = URL(fileURLWithPath: projectRootPath)
-        let urls = installer.pickAllowPaths(projectRoot: root)
-        guard !urls.isEmpty else { return }
-        var current = staffPathFences[staff] ?? []
-        for url in urls {
-            let rel = installer.relativePath(for: url, projectRoot: root)
-            if !current.contains(rel) {
-                current.append(rel)
-            }
-        }
-        staffPathFences[staff] = current
     }
 
     private func labeled(_ k: String, _ v: String) -> some View {
@@ -354,35 +382,31 @@ struct AddCompanySheet: View {
             Text(k).font(.caption).foregroundStyle(.secondary)
             Text(v).font(.system(.body, design: .monospaced)).textSelection(.enabled)
         }
-    }
-
-    private func binding(forStaff name: String) -> Binding<Bool> {
-        Binding(
-            get: { selectedStaffs.contains(name) },
-            set: { on in
-                if name == "ceo" { selectedStaffs.insert("ceo"); return }
-                if on { selectedStaffs.insert(name) } else { selectedStaffs.remove(name) }
-            }
-        )
-    }
-
-    private func binding(forSkill id: String) -> Binding<Bool> {
-        Binding(
-            get: { selectedSkillIDs.contains(id) },
-            set: { on in
-                if on { selectedSkillIDs.insert(id) } else { selectedSkillIDs.remove(id) }
-            }
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func loadCatalog() {
         guard let holding = appModel.holdingPath else { return }
-        templateStaffs = catalog.loadStaffTemplates(holdingRoot: holding)
+        templateCatalog = catalog.loadStaffTemplates(holdingRoot: holding)
         librarySkills = catalog.loadLibrarySkills(holdingRoot: holding)
-        if selectedStaffs.isEmpty {
-            selectedStaffs = Set(templateStaffs.filter(\.recommended).map(\.name))
-            selectedStaffs.insert("ceo")
+        if roster.isEmpty {
+            applyRecommended()
         }
+    }
+
+    private func applyRecommended() {
+        var byName: [String: StaffDraft] = [:]
+        for s in roster { byName[s.name] = s }
+        let rec = templateCatalog.filter { $0.recommended || $0.name == "ceo" }
+        for t in rec {
+            if byName[t.name] == nil {
+                byName[t.name] = .fromTemplate(t)
+            }
+        }
+        if byName["ceo"] == nil, let ceo = templateCatalog.first(where: { $0.name == "ceo" }) {
+            byName["ceo"] = .fromTemplate(ceo)
+        }
+        roster = byName.values.sorted { $0.name < $1.name }
     }
 
     private func browse() {
@@ -390,29 +414,11 @@ struct AddCompanySheet: View {
         projectRootPath = url.path
         name = installer.suggestedName(for: url)
         let existing = installer.existingCompanyDirs(in: url)
-        if !existing.isEmpty {
-            registerOnly = true
-            existingHint = "Phát hiện: \(existing.map(\.lastPathComponent).joined(separator: ", "))"
-        } else {
-            registerOnly = false
-            existingHint = "Chưa có Company OS → create-company rồi apply roster/skills đã chọn từ catalog."
-        }
+        registerOnly = !existing.isEmpty
+        modeHint = registerOnly
+            ? "Tự nhận: đã có \(existing.map(\.lastPathComponent).joined(separator: ", ")) → register + apply roster."
+            : "Tự nhận: chưa có Company OS → create-company + apply roster."
         localError = nil
-    }
-
-    private func goNext() {
-        guard let next = Step(rawValue: step.rawValue + 1) else { return }
-        if next == .paths, !selectedStaffs.contains(pathsFocusStaff) {
-            pathsFocusStaff = selectedStaffs.sorted().first ?? "ceo"
-        }
-        // Drop fences for staffs no longer selected
-        staffPathFences = staffPathFences.filter { selectedStaffs.contains($0.key) }
-        step = next
-    }
-
-    private func goBack() {
-        guard let prev = Step(rawValue: step.rawValue - 1) else { return }
-        step = prev
     }
 
     @MainActor
@@ -426,18 +432,47 @@ struct AddCompanySheet: View {
             return
         }
 
+        var keep: [String] = []
+        var customs: [RosterSpec.CustomStaffSpec] = []
+        var configs: [String: RosterSpec.StaffConfigSpec] = [:]
         var fences: [String: [String]] = [:]
-        for staff in selectedStaffs {
-            let paths = (staffPathFences[staff] ?? []).filter { !$0.isEmpty }
-            if !paths.isEmpty {
-                fences[staff] = paths
+
+        for s in roster {
+            if s.isNew {
+                customs.append(
+                    .init(
+                        name: s.name,
+                        team: s.team,
+                        description: s.description,
+                        tier: s.tier,
+                        lead: s.lead,
+                        skill_ids: s.selectedSkillIDs.sorted(),
+                        paths: s.allowPaths,
+                        new_skills: []
+                    )
+                )
+            } else {
+                keep.append(s.name)
+                configs[s.name] = .init(
+                    skill_ids: s.selectedSkillIDs.sorted(),
+                    paths: s.allowPaths,
+                    description: s.description,
+                    tier: s.tier,
+                    lead: s.lead
+                )
+            }
+            if !s.allowPaths.isEmpty {
+                fences[s.name] = s.allowPaths
             }
         }
+        keep.append("ceo")
+
         let spec = RosterSpec(
-            keep_staffs: selectedStaffs.sorted(),
-            custom_staffs: [],
-            extra_skill_ids: selectedSkillIDs.sorted(),
-            staff_path_fences: fences
+            keep_staffs: Array(Set(keep)).sorted(),
+            custom_staffs: customs,
+            extra_skill_ids: [],
+            staff_path_fences: fences,
+            staff_configs: configs
         )
 
         do {
@@ -452,11 +487,125 @@ struct AddCompanySheet: View {
             let output = try installer.install(request, holdingRoot: holding)
             log = output.isEmpty ? "OK" : output
             appModel.reloadHolding()
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: 400_000_000)
             dismiss()
         } catch {
             localError = error.localizedDescription
             log = error.localizedDescription
+        }
+    }
+}
+
+struct StaffEditorSheet: View {
+    @Binding var draft: StaffDraft
+    let librarySkills: [LibrarySkill]
+    let projectRootPath: String
+    let installer: CompanyInstallService
+    @Environment(\.dismiss) private var dismiss
+    @State private var skillFilter = ""
+
+    private var filtered: [LibrarySkill] {
+        let q = skillFilter.lowercased()
+        if q.isEmpty { return librarySkills }
+        return librarySkills.filter {
+            $0.id.lowercased().contains(q)
+                || $0.target.lowercased().contains(q)
+                || $0.tags.contains { $0.lowercased().contains(q) }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(draft.name).font(.title3.weight(.semibold))
+                    Text(draft.isNew ? "New staff — skills/access gắn riêng staff này" : "Template staff")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Group {
+                        Text("Description").font(.headline)
+                        TextEditor(text: $draft.description)
+                            .frame(minHeight: 80)
+                            .border(Color.secondary.opacity(0.2))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Group {
+                        Text("Access (files/folders)").font(.headline)
+                        Text("Browse để allow path staff được làm việc.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Button("Browse allow…") { browsePaths() }
+                            Button("Clear") { draft.allowPaths = [] }
+                                .disabled(draft.allowPaths.isEmpty)
+                        }
+                        ForEach(draft.allowPaths, id: \.self) { path in
+                            HStack {
+                                Text(path)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Button(role: .destructive) {
+                                    draft.allowPaths.removeAll { $0 == path }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+
+                    Group {
+                        Text("Skills (library → staff này)").font(.headline)
+                        TextField("Filter…", text: $skillFilter)
+                            .textFieldStyle(.roundedBorder)
+                        ForEach(filtered) { skill in
+                            Toggle(isOn: skillBinding(skill.id)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(skill.id).fontWeight(.medium)
+                                    Text(skill.target)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(width: 560, height: 520)
+    }
+
+    private func skillBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { draft.selectedSkillIDs.contains(id) },
+            set: { on in
+                if on { draft.selectedSkillIDs.insert(id) }
+                else { draft.selectedSkillIDs.remove(id) }
+            }
+        )
+    }
+
+    private func browsePaths() {
+        let root = URL(fileURLWithPath: projectRootPath)
+        let urls = installer.pickAllowPaths(projectRoot: root)
+        for url in urls {
+            let rel = installer.relativePath(for: url, projectRoot: root)
+            if !draft.allowPaths.contains(rel) {
+                draft.allowPaths.append(rel)
+            }
         }
     }
 }
