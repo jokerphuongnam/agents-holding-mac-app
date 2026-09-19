@@ -61,7 +61,9 @@ struct StaffsTreeView: View {
                                     )
                                 }
                             )
+                            .background(GraphScrollViewLocator(bridge: zoomState.scrollBridge))
                             // Smooth interactive zoom (bitmap). Baked to layout after idle.
+                            // topLeading + scroll compensation keeps the viewport focal point stable.
                             .scaleEffect(zoomState.rubberScale, anchor: .topLeading)
                             .frame(
                                 width: scaledWidth,
@@ -175,6 +177,79 @@ struct StaffsTreeView: View {
     }
 }
 
+// MARK: - Scroll bridge (keep viewport focal point while zooming)
+
+private final class GraphScrollBridge {
+    weak var scrollView: NSScrollView?
+
+    /// After content scale changes from `oldRubber` → `newRubber` (topLeading),
+    /// re-scroll so the same document point stays under the viewport center.
+    func preserveCenter(oldRubber: CGFloat, newRubber: CGFloat) {
+        guard let scrollView, oldRubber > 0.0001 else { return }
+        let factor = newRubber / oldRubber
+        guard abs(factor - 1) > 0.00001 else { return }
+        let visible = scrollView.contentView.documentVisibleRect
+        let targetMid = CGPoint(x: visible.midX * factor, y: visible.midY * factor)
+        // Wait one turn so SwiftUI applies the new content size first.
+        DispatchQueue.main.async { [weak self] in
+            self?.scrollSoCenterIs(targetMid)
+        }
+    }
+
+    /// After layout bake (document size may change slightly), keep the same relative center.
+    func preserveNormalizedCenter(_ normalized: CGPoint) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let scrollView, let doc = scrollView.documentView else { return }
+            let size = doc.bounds.size
+            guard size.width > 1, size.height > 1 else { return }
+            let mid = CGPoint(x: normalized.x * size.width, y: normalized.y * size.height)
+            self.scrollSoCenterIs(mid)
+        }
+    }
+
+    func normalizedCenter() -> CGPoint? {
+        guard let scrollView, let doc = scrollView.documentView else { return nil }
+        let size = doc.bounds.size
+        guard size.width > 1, size.height > 1 else { return nil }
+        let visible = scrollView.contentView.documentVisibleRect
+        return CGPoint(x: visible.midX / size.width, y: visible.midY / size.height)
+    }
+
+    private func scrollSoCenterIs(_ mid: CGPoint) {
+        guard let scrollView else { return }
+        let visible = scrollView.contentView.documentVisibleRect
+        let doc = scrollView.documentView?.bounds.size ?? .zero
+        let maxX = max(0, doc.width - visible.width)
+        let maxY = max(0, doc.height - visible.height)
+        let origin = NSPoint(
+            x: min(max(0, mid.x - visible.width / 2), maxX),
+            y: min(max(0, mid.y - visible.height / 2), maxY)
+        )
+        scrollView.contentView.scroll(to: origin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+}
+
+/// Finds the enclosing `NSScrollView` from inside SwiftUI content.
+private struct GraphScrollViewLocator: NSViewRepresentable {
+    let bridge: GraphScrollBridge
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.isHidden = true
+        DispatchQueue.main.async {
+            bridge.scrollView = view.enclosingScrollView
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            bridge.scrollView = nsView.enclosingScrollView
+        }
+    }
+}
+
 // MARK: - Zoom state (smooth rubber + crisp bake)
 
 /// `rubberScale` = live scaleEffect (smooth). `layoutZoom` = real metrics (crisp after idle).
@@ -183,6 +258,7 @@ private final class OrgGraphZoomState: ObservableObject {
     @Published var rubberScale: CGFloat = 1.0
 
     var isHovered = false
+    let scrollBridge = GraphScrollBridge()
     private var pinchDisplayBase: CGFloat = 1.0
     private var isPinching = false
     private var scrollMonitor: Any?
@@ -197,10 +273,9 @@ private final class OrgGraphZoomState: ObservableObject {
 
     func resetAnimated() {
         bakeWork?.cancel()
-        withAnimation(.easeOut(duration: 0.2)) {
-            rubberScale = 1 / max(layoutZoom, 0.001)
-        }
-        scheduleBake(delay: 0.22)
+        let targetRubber = 1 / max(layoutZoom, 0.001)
+        setRubberScale(targetRubber)
+        scheduleBake(delay: 0.12)
     }
 
     func zoomInAnimated() {
@@ -214,10 +289,8 @@ private final class OrgGraphZoomState: ObservableObject {
     private func nudgeRubber(factor: CGFloat) {
         let targetDisplay = clamp(displayZoom * factor)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        withAnimation(.easeOut(duration: 0.15)) {
-            rubberScale = nextRubber
-        }
-        scheduleBake(delay: 0.18)
+        setRubberScale(nextRubber)
+        scheduleBake(delay: 0.14)
     }
 
     func applyPinch(_ magnification: CGFloat) {
@@ -227,8 +300,7 @@ private final class OrgGraphZoomState: ObservableObject {
             bakeWork?.cancel()
         }
         let targetDisplay = clamp(pinchDisplayBase * magnification)
-        rubberScale = targetDisplay / max(layoutZoom, 0.001)
-        // Bake when the gesture ends — not on every tick.
+        setRubberScale(targetDisplay / max(layoutZoom, 0.001))
     }
 
     func endPinch() {
@@ -239,8 +311,17 @@ private final class OrgGraphZoomState: ObservableObject {
 
     func applyScrollStep(_ step: CGFloat) {
         let targetDisplay = clamp(displayZoom + step)
-        rubberScale = targetDisplay / max(layoutZoom, 0.001)
+        setRubberScale(targetDisplay / max(layoutZoom, 0.001))
         scheduleBake(delay: 0.14)
+    }
+
+    /// Set rubber scale and keep the same document point under the viewport center.
+    private func setRubberScale(_ newRubber: CGFloat) {
+        let old = rubberScale
+        let next = max(0.01, newRubber)
+        guard abs(next - old) > 0.00001 else { return }
+        rubberScale = next
+        scrollBridge.preserveCenter(oldRubber: old, newRubber: next)
     }
 
     /// Collapse rubber into layout metrics (same visual size → swap blur for crisp type).
@@ -248,12 +329,21 @@ private final class OrgGraphZoomState: ObservableObject {
         bakeWork?.cancel()
         bakeWork = nil
         let baked = snap(displayZoom)
+        // Capture focal point before document size changes.
+        let normalized = scrollBridge.normalizedCenter()
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             layoutZoom = baked
             rubberScale = 1.0
             pinchDisplayBase = baked
+        }
+        if let normalized {
+            scrollBridge.preserveNormalizedCenter(normalized)
+            // Second pass after layout settles.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
+                self?.scrollBridge.preserveNormalizedCenter(normalized)
+            }
         }
     }
 
