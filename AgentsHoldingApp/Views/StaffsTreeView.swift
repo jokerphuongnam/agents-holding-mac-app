@@ -4,7 +4,11 @@ import SwiftUI
 /// Staffs org graph — top is senior, below are reports.
 /// Connectors **stop at card edges** (never run through a card body).
 /// Large leaf teams: left/right stacks + center gutter spine.
-/// Zoom: **⌘ + scroll** resizes layout (not `scaleEffect`) so text/lines stay sharp.
+///
+/// Zoom is hybrid for smoothness + sharpness:
+/// - while ⌘+scrolling / pinching / tapping +−: cheap `scaleEffect` (`rubberScale`)
+/// - after a short idle: bake into layout metrics (`layoutZoom`) so text stays crisp
+/// ScrollView viewport stays fixed; only graph content zooms.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
@@ -12,6 +16,7 @@ struct StaffsTreeView: View {
     private let viewportMaxHeight: CGFloat = 560
 
     @StateObject private var zoomState = OrgGraphZoomState()
+    @State private var baseContentSize: CGSize = .zero
 
     /// Prefer classic CEO roots when centering the viewport.
     private var focusRootId: String? {
@@ -23,7 +28,7 @@ struct StaffsTreeView: View {
     }
 
     private var layout: OrgLayout {
-        OrgLayout(zoom: zoomState.zoom)
+        OrgLayout(zoom: zoomState.layoutZoom)
     }
 
     var body: some View {
@@ -48,8 +53,22 @@ struct StaffsTreeView: View {
                 ScrollViewReader { proxy in
                     ScrollView([.horizontal, .vertical], showsIndicators: true) {
                         graphContent
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: OrgContentSizeKey.self,
+                                        value: geo.size
+                                    )
+                                }
+                            )
+                            // Smooth interactive zoom (bitmap). Baked to layout after idle.
+                            .scaleEffect(zoomState.rubberScale, anchor: .topLeading)
+                            .frame(
+                                width: scaledWidth,
+                                height: scaledHeight,
+                                alignment: .topLeading
+                            )
                     }
-                    // Viewport stays fixed; content grows/shrinks with layout zoom.
                     .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight, alignment: .topLeading)
                     .clipped()
                     .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
@@ -66,8 +85,9 @@ struct StaffsTreeView: View {
                     .onChange(of: focusRootId) { _, _ in
                         scrollCEOToCenter(proxy)
                     }
-                    .onChange(of: zoomState.zoom) { _, _ in
-                        scrollCEOToCenter(proxy)
+                    .onPreferenceChange(OrgContentSizeKey.self) { newSize in
+                        guard newSize.width > 1, newSize.height > 1 else { return }
+                        baseContentSize = newSize
                     }
                 }
             }
@@ -75,10 +95,18 @@ struct StaffsTreeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var scaledWidth: CGFloat? {
+        baseContentSize.width > 1 ? baseContentSize.width * zoomState.rubberScale : nil
+    }
+
+    private var scaledHeight: CGFloat? {
+        baseContentSize.height > 1 ? baseContentSize.height * zoomState.rubberScale : nil
+    }
+
     private var zoomToolbar: some View {
         HStack(spacing: 6) {
             Button {
-                withAnimation(.easeOut(duration: 0.15)) { zoomState.zoomOut() }
+                zoomState.zoomOutAnimated()
             } label: {
                 Image(systemName: "minus.magnifyingglass")
             }
@@ -87,13 +115,13 @@ struct StaffsTreeView: View {
             .disabled(!zoomState.canZoomOut)
             .accessibilityLabel(L10n.staffsTreeZoomOut)
 
-            Text("\(Int((zoomState.zoom * 100).rounded()))%")
+            Text("\(Int((zoomState.displayZoom * 100).rounded()))%")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 36, alignment: .center)
 
             Button {
-                withAnimation(.easeOut(duration: 0.15)) { zoomState.zoomIn() }
+                zoomState.zoomInAnimated()
             } label: {
                 Image(systemName: "plus.magnifyingglass")
             }
@@ -103,10 +131,10 @@ struct StaffsTreeView: View {
             .accessibilityLabel(L10n.staffsTreeZoomIn)
 
             Button(L10n.staffsTreeZoomReset) {
-                withAnimation(.easeOut(duration: 0.2)) { zoomState.reset() }
+                zoomState.resetAnimated()
             }
             .buttonStyle(.borderless)
-            .disabled(abs(zoomState.zoom - 1) < 0.01)
+            .disabled(abs(zoomState.displayZoom - 1) < 0.01)
         }
         .controlSize(.small)
     }
@@ -121,8 +149,6 @@ struct StaffsTreeView: View {
         .padding(layout.padding)
         .frame(minWidth: 320 * layout.zoom, alignment: .top)
         .coordinateSpace(name: OrgChartSpace.name)
-        // Stable identity so zoom rebuilds crisp vector text instead of scaling a bitmap.
-        .id("org-zoom-\(String(format: "%.2f", layout.zoom))")
     }
 
     private var pinchZoomGesture: some Gesture {
@@ -149,50 +175,103 @@ struct StaffsTreeView: View {
     }
 }
 
-/// Reference-type zoom state so ⌘+scroll NSEvent monitor sees live hover/zoom.
+// MARK: - Zoom state (smooth rubber + crisp bake)
+
+/// `rubberScale` = live scaleEffect (smooth). `layoutZoom` = real metrics (crisp after idle).
 private final class OrgGraphZoomState: ObservableObject {
-    @Published var zoom: CGFloat = 1.0
+    @Published var layoutZoom: CGFloat = 1.0
+    @Published var rubberScale: CGFloat = 1.0
+
     var isHovered = false
-    private var pinchBase: CGFloat = 1.0
+    private var pinchDisplayBase: CGFloat = 1.0
+    private var isPinching = false
     private var scrollMonitor: Any?
+    private var bakeWork: DispatchWorkItem?
 
     private let zoomMin: CGFloat = 0.5
     private let zoomMax: CGFloat = 2.0
 
-    var canZoomIn: Bool { zoom < zoomMax - 0.001 }
-    var canZoomOut: Bool { zoom > zoomMin + 0.001 }
+    var displayZoom: CGFloat { layoutZoom * rubberScale }
+    var canZoomIn: Bool { displayZoom < zoomMax - 0.001 }
+    var canZoomOut: Bool { displayZoom > zoomMin + 0.001 }
 
-    func reset() {
-        zoom = 1.0
-        pinchBase = 1.0
+    func resetAnimated() {
+        bakeWork?.cancel()
+        withAnimation(.easeOut(duration: 0.2)) {
+            rubberScale = 1 / max(layoutZoom, 0.001)
+        }
+        scheduleBake(delay: 0.22)
     }
 
-    func zoomIn() {
-        setZoom(zoom + 0.1)
+    func zoomInAnimated() {
+        nudgeRubber(factor: 1.1)
     }
 
-    func zoomOut() {
-        setZoom(zoom - 0.1)
+    func zoomOutAnimated() {
+        nudgeRubber(factor: 1 / 1.1)
+    }
+
+    private func nudgeRubber(factor: CGFloat) {
+        let targetDisplay = clamp(displayZoom * factor)
+        let nextRubber = targetDisplay / max(layoutZoom, 0.001)
+        withAnimation(.easeOut(duration: 0.15)) {
+            rubberScale = nextRubber
+        }
+        scheduleBake(delay: 0.18)
     }
 
     func applyPinch(_ magnification: CGFloat) {
-        // Keep pinchBase until gesture ends so magnification stays relative.
-        zoom = Self.snap(pinchBase * magnification, min: zoomMin, max: zoomMax)
+        if !isPinching {
+            isPinching = true
+            pinchDisplayBase = displayZoom
+            bakeWork?.cancel()
+        }
+        let targetDisplay = clamp(pinchDisplayBase * magnification)
+        rubberScale = targetDisplay / max(layoutZoom, 0.001)
+        // Bake when the gesture ends — not on every tick.
     }
 
     func endPinch() {
-        pinchBase = zoom
+        isPinching = false
+        pinchDisplayBase = displayZoom
+        bakeNow()
     }
 
-    private func setZoom(_ value: CGFloat) {
-        // Snap to 5% steps so layout/fonts stay on clean sizes (sharper glyphs).
-        let snapped = Self.snap(value, min: zoomMin, max: zoomMax)
-        zoom = snapped
-        pinchBase = snapped
+    func applyScrollStep(_ step: CGFloat) {
+        let targetDisplay = clamp(displayZoom + step)
+        rubberScale = targetDisplay / max(layoutZoom, 0.001)
+        scheduleBake(delay: 0.14)
     }
 
-    private static func snap(_ value: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
-        let clamped = Swift.min(Swift.max(value, min), max)
+    /// Collapse rubber into layout metrics (same visual size → swap blur for crisp type).
+    func bakeNow() {
+        bakeWork?.cancel()
+        bakeWork = nil
+        let baked = snap(displayZoom)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            layoutZoom = baked
+            rubberScale = 1.0
+            pinchDisplayBase = baked
+        }
+    }
+
+    private func scheduleBake(delay: TimeInterval) {
+        bakeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.bakeNow()
+        }
+        bakeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func clamp(_ value: CGFloat) -> CGFloat {
+        min(max(value, zoomMin), zoomMax)
+    }
+
+    private func snap(_ value: CGFloat) -> CGFloat {
+        let clamped = clamp(value)
         return (clamped * 20).rounded() / 20
     }
 
@@ -207,18 +286,15 @@ private final class OrgGraphZoomState: ObservableObject {
             }
             let delta = event.scrollingDeltaY
             let step = event.hasPreciseScrollingDeltas ? delta * 0.004 : delta * 0.06
-            let next = self.zoom + step
-            let before = self.zoom
             DispatchQueue.main.async {
-                self.setZoom(next)
+                self.applyScrollStep(step)
             }
-            // Consume only when zoom would change.
-            let snapped = (min(max(next, self.zoomMin), self.zoomMax) * 20).rounded() / 20
-            return abs(snapped - before) > 0.0001 ? nil : event
+            return nil
         }
     }
 
     func removeCommandScrollMonitor() {
+        bakeWork?.cancel()
         if let scrollMonitor {
             NSEvent.removeMonitor(scrollMonitor)
             self.scrollMonitor = nil
@@ -234,7 +310,17 @@ private enum OrgScrollAnchor {
     static func card(_ staffId: String) -> String { "org-card-\(staffId)" }
 }
 
-// MARK: - Layout (zoom multiplies real sizes — no bitmap scale)
+private struct OrgContentSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next.width * next.height > value.width * value.height {
+            value = next
+        }
+    }
+}
+
+// MARK: - Layout (committed zoom multiplies real sizes)
 
 private struct OrgLayout: Equatable {
     var zoom: CGFloat
