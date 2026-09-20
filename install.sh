@@ -10,7 +10,7 @@ exec </dev/null
 
 REPO="${AGENTS_HOLDING_MAC_REPO:-jokerphuongnam/agents-holding-mac-app}"
 ASSET_NAME="${AGENTS_HOLDING_MAC_DMG:-AgentsHolding-mac.dmg}"
-TAG="${AGENTS_HOLDING_MAC_TAG:-latest}" # latest | v0.1.0
+TAG="${AGENTS_HOLDING_MAC_TAG:-latest}" # latest | v1.0.1
 INSTALL_DIR="${AGENTS_HOLDING_MAC_APP_DIR:-/Applications}"
 OPEN_APP=1
 KEEP_DMG=0
@@ -22,7 +22,7 @@ Install prebuilt Agents Holding macOS app from GitHub Releases into /Application
   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 
 Options (bash -s):
-  --tag v0.1.0          Release tag (default: latest)
+  --tag v1.0.1          Release tag (default: latest)
   --asset NAME.dmg      Asset filename (default: AgentsHolding-mac.dmg)
   --dir /Applications   Install directory (default: /Applications)
   --no-open             Do not launch the app after install
@@ -66,7 +66,7 @@ echo "[install] fetching release metadata ($TAG)…"
 META="$(curl -fsSL "$(api_url)")" || {
   echo "error: could not fetch release from GitHub ($REPO $TAG)." >&2
   echo "       Publish a Release with asset $ASSET_NAME first:" >&2
-  echo "         ./Scripts/package-dmg.sh && gh release create v0.1.0 dist/$ASSET_NAME" >&2
+  echo "         ./Scripts/package-dmg.sh && gh release create v1.0.1 dist/$ASSET_NAME --latest" >&2
   exit 1
 }
 
