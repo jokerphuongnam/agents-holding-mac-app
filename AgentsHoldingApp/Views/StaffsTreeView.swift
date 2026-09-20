@@ -2,13 +2,11 @@ import AppKit
 import SwiftUI
 
 /// Staffs org graph — top is senior, below are reports.
-/// Connectors **stop at card edges** (never run through a card body).
-/// Large leaf teams: left/right stacks + center gutter spine.
-///
-/// Zoom is hybrid for smoothness + sharpness:
-/// - while ⌘+scrolling / pinching / tapping +−: cheap `scaleEffect` (`rubberScale`)
-/// - after a short idle: bake into layout metrics (`layoutZoom`) so text stays crisp
-/// ScrollView viewport stays fixed; only graph content zooms.
+/// Zoom/pan model (keeps a card under the cursor/center stable):
+/// - content laid out at `layoutZoom` (crisp after bake)
+/// - live `rubberScale` + `panOffset` transform: screen = point * rubber + offset
+/// - ⌘+scroll / ± buttons / pinch zoom **around the focal point** (cursor or viewport center)
+/// - drag or plain scroll pans; viewport chrome stays fixed
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
@@ -16,15 +14,15 @@ struct StaffsTreeView: View {
     private let viewportMaxHeight: CGFloat = 560
 
     @StateObject private var zoomState = OrgGraphZoomState()
-    @State private var baseContentSize: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
+    @State private var didCenterCEO = false
 
-    /// Prefer classic CEO roots when centering the viewport.
-    private var focusRootId: String? {
+    private var focusStaffId: String? {
         let ids = roots.map(\.staff.id)
         if let ceo = ids.first(where: { $0 == "holding-ceo" || $0 == "ceo" }) {
-            return OrgScrollAnchor.card(ceo)
+            return ceo
         }
-        return roots.first.map { OrgScrollAnchor.card($0.staff.id) }
+        return roots.first?.staff.id
     }
 
     private var layout: OrgLayout {
@@ -50,65 +48,69 @@ struct StaffsTreeView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                        graphContent
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: OrgContentSizeKey.self,
-                                        value: geo.size
-                                    )
-                                }
-                            )
-                            .background(GraphScrollViewLocator(bridge: zoomState.scrollBridge))
-                            // Smooth interactive zoom (bitmap). Baked to layout after idle.
-                            // topLeading + scroll compensation keeps the viewport focal point stable.
-                            .scaleEffect(zoomState.rubberScale, anchor: .topLeading)
-                            .frame(
-                                width: scaledWidth,
-                                height: scaledHeight,
-                                alignment: .topLeading
-                            )
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight, alignment: .topLeading)
-                    .clipped()
-                    .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .onHover { zoomState.isHovered = $0 }
-                    .simultaneousGesture(pinchZoomGesture)
-                    .onAppear {
-                        zoomState.installCommandScrollMonitor()
-                        scrollCEOToCenter(proxy)
-                    }
-                    .onDisappear {
-                        zoomState.removeCommandScrollMonitor()
-                    }
-                    .onChange(of: focusRootId) { _, _ in
-                        scrollCEOToCenter(proxy)
-                    }
-                    .onPreferenceChange(OrgContentSizeKey.self) { newSize in
-                        guard newSize.width > 1, newSize.height > 1 else { return }
-                        baseContentSize = newSize
-                    }
-                }
+                graphViewport
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var scaledWidth: CGFloat? {
-        baseContentSize.width > 1 ? baseContentSize.width * zoomState.rubberScale : nil
-    }
-
-    private var scaledHeight: CGFloat? {
-        baseContentSize.height > 1 ? baseContentSize.height * zoomState.rubberScale : nil
+    private var graphViewport: some View {
+        GeometryReader { viewportGeo in
+            ZStack(alignment: .topLeading) {
+                graphContent
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: OrgContentSizeKey.self,
+                                value: geo.size
+                            )
+                        }
+                    )
+                    .scaleEffect(zoomState.rubberScale, anchor: .topLeading)
+                    .offset(zoomState.panOffset)
+                    .gesture(panDragGesture)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
+            .contentShape(Rectangle())
+            .onAppear {
+                viewportSize = viewportGeo.size
+                zoomState.viewportSize = viewportGeo.size
+                zoomState.installEventMonitors()
+                centerCEOIfNeeded()
+            }
+            .onChange(of: viewportGeo.size) { _, newSize in
+                viewportSize = newSize
+                zoomState.viewportSize = newSize
+            }
+            .onDisappear {
+                zoomState.removeEventMonitors()
+            }
+            .onHover { hovering in
+                zoomState.isHovered = hovering
+                if !hovering { zoomState.cursorInViewport = nil }
+            }
+            .overlay {
+                ViewportCursorTracker { point in
+                    zoomState.cursorInViewport = point
+                }
+                .allowsHitTesting(false)
+            }
+            .simultaneousGesture(pinchZoomGesture)
+            .onPreferenceChange(CardFrameKey.self) { frames in
+                zoomState.cardFrames = frames
+                centerCEOIfNeeded()
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight)
+        .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var zoomToolbar: some View {
         HStack(spacing: 6) {
             Button {
-                zoomState.zoomOutAnimated()
+                zoomState.zoomOutTowardFocal()
             } label: {
                 Image(systemName: "minus.magnifyingglass")
             }
@@ -123,7 +125,7 @@ struct StaffsTreeView: View {
                 .frame(minWidth: 36, alignment: .center)
 
             Button {
-                zoomState.zoomInAnimated()
+                zoomState.zoomInTowardFocal()
             } label: {
                 Image(systemName: "plus.magnifyingglass")
             }
@@ -133,7 +135,7 @@ struct StaffsTreeView: View {
             .accessibilityLabel(L10n.staffsTreeZoomIn)
 
             Button(L10n.staffsTreeZoomReset) {
-                zoomState.resetAnimated()
+                zoomState.resetTowardFocal()
             }
             .buttonStyle(.borderless)
             .disabled(abs(zoomState.displayZoom - 1) < 0.01)
@@ -153,6 +155,16 @@ struct StaffsTreeView: View {
         .coordinateSpace(name: OrgChartSpace.name)
     }
 
+    private var panDragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                zoomState.panDragChanged(translation: value.translation)
+            }
+            .onEnded { _ in
+                zoomState.panDragEnded()
+            }
+    }
+
     private var pinchZoomGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
@@ -163,104 +175,103 @@ struct StaffsTreeView: View {
             }
     }
 
-    /// Center the CEO card in the graph viewport (after layout settles).
-    private func scrollCEOToCenter(_ proxy: ScrollViewProxy) {
-        guard let id = focusRootId else { return }
-        DispatchQueue.main.async {
-            proxy.scrollTo(id, anchor: .center)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo(id, anchor: .center)
-            }
-        }
-    }
-}
-
-// MARK: - Scroll bridge (keep viewport focal point while zooming)
-
-private final class GraphScrollBridge {
-    weak var scrollView: NSScrollView?
-
-    /// After content scale changes from `oldRubber` → `newRubber` (topLeading),
-    /// re-scroll so the same document point stays under the viewport center.
-    func preserveCenter(oldRubber: CGFloat, newRubber: CGFloat) {
-        guard let scrollView, oldRubber > 0.0001 else { return }
-        let factor = newRubber / oldRubber
-        guard abs(factor - 1) > 0.00001 else { return }
-        let visible = scrollView.contentView.documentVisibleRect
-        let targetMid = CGPoint(x: visible.midX * factor, y: visible.midY * factor)
-        // Wait one turn so SwiftUI applies the new content size first.
-        DispatchQueue.main.async { [weak self] in
-            self?.scrollSoCenterIs(targetMid)
-        }
-    }
-
-    /// After layout bake (document size may change slightly), keep the same relative center.
-    func preserveNormalizedCenter(_ normalized: CGPoint) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let scrollView, let doc = scrollView.documentView else { return }
-            let size = doc.bounds.size
-            guard size.width > 1, size.height > 1 else { return }
-            let mid = CGPoint(x: normalized.x * size.width, y: normalized.y * size.height)
-            self.scrollSoCenterIs(mid)
-        }
-    }
-
-    func normalizedCenter() -> CGPoint? {
-        guard let scrollView, let doc = scrollView.documentView else { return nil }
-        let size = doc.bounds.size
-        guard size.width > 1, size.height > 1 else { return nil }
-        let visible = scrollView.contentView.documentVisibleRect
-        return CGPoint(x: visible.midX / size.width, y: visible.midY / size.height)
-    }
-
-    private func scrollSoCenterIs(_ mid: CGPoint) {
-        guard let scrollView else { return }
-        let visible = scrollView.contentView.documentVisibleRect
-        let doc = scrollView.documentView?.bounds.size ?? .zero
-        let maxX = max(0, doc.width - visible.width)
-        let maxY = max(0, doc.height - visible.height)
-        let origin = NSPoint(
-            x: min(max(0, mid.x - visible.width / 2), maxX),
-            y: min(max(0, mid.y - visible.height / 2), maxY)
+    /// Place CEO under the viewport center once frames are known.
+    private func centerCEOIfNeeded() {
+        guard !didCenterCEO,
+              let focusStaffId,
+              viewportSize.width > 1,
+              viewportSize.height > 1
+        else { return }
+        let anchorId = OrgScrollAnchor.card(focusStaffId)
+        // CardFrameKey stores raw card frames; OrgNodeView publishes staff.id keys via cardAnchor.
+        // Prefer staff id key used by CardFrameKey (staff.id), not scroll anchor string.
+        guard let frame = zoomState.cardFrames[focusStaffId] ?? zoomState.cardFrames[anchorId]
+        else { return }
+        zoomState.centerContentPoint(
+            CGPoint(x: frame.midX, y: frame.midY),
+            in: viewportSize
         )
-        scrollView.contentView.scroll(to: origin)
-        scrollView.reflectScrolledClipView(scrollView.contentView)
+        didCenterCEO = true
     }
 }
 
-/// Finds the enclosing `NSScrollView` from inside SwiftUI content.
-private struct GraphScrollViewLocator: NSViewRepresentable {
-    let bridge: GraphScrollBridge
+// MARK: - Cursor tracking (focal point for ⌘+scroll)
+
+private struct ViewportCursorTracker: NSViewRepresentable {
+    let onMove: (CGPoint?) -> Void
+
+    final class Coordinator {
+        var onMove: (CGPoint?) -> Void
+        init(onMove: @escaping (CGPoint?) -> Void) { self.onMove = onMove }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(onMove: onMove) }
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.isHidden = true
-        DispatchQueue.main.async {
-            bridge.scrollView = view.enclosingScrollView
-        }
+        let view = CursorNSView()
+        view.coordinator = context.coordinator
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            bridge.scrollView = nsView.enclosingScrollView
+        context.coordinator.onMove = onMove
+        (nsView as? CursorNSView)?.coordinator = context.coordinator
+    }
+
+    private final class CursorNSView: NSView {
+        weak var coordinator: Coordinator?
+        private var area: NSTrackingArea?
+
+        override var isFlipped: Bool { true }
+
+        /// Let clicks reach SwiftUI cards underneath.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let area { removeTrackingArea(area) }
+            let options: NSTrackingArea.Options = [
+                .activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect,
+            ]
+            let newArea = NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil)
+            addTrackingArea(newArea)
+            area = newArea
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            let p = convert(event.locationInWindow, from: nil)
+            coordinator?.onMove(p)
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            let p = convert(event.locationInWindow, from: nil)
+            coordinator?.onMove(p)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            coordinator?.onMove(nil)
         }
     }
 }
 
-// MARK: - Zoom state (smooth rubber + crisp bake)
+// MARK: - Zoom / pan state (focal-point stable)
 
-/// `rubberScale` = live scaleEffect (smooth). `layoutZoom` = real metrics (crisp after idle).
+/// screen = contentPoint * rubberScale + panOffset  (topLeading scale)
 private final class OrgGraphZoomState: ObservableObject {
     @Published var layoutZoom: CGFloat = 1.0
     @Published var rubberScale: CGFloat = 1.0
+    @Published var panOffset: CGSize = .zero
 
     var isHovered = false
-    let scrollBridge = GraphScrollBridge()
+    var viewportSize: CGSize = .zero
+    /// Cursor in viewport coords (flipped / SwiftUI-like topLeading).
+    var cursorInViewport: CGPoint?
+    var cardFrames: [String: CGRect] = [:]
+
     private var pinchDisplayBase: CGFloat = 1.0
     private var isPinching = false
+    private var isPanning = false
+    private var panDragStart: CGSize = .zero
     private var scrollMonitor: Any?
     private var bakeWork: DispatchWorkItem?
 
@@ -271,25 +282,32 @@ private final class OrgGraphZoomState: ObservableObject {
     var canZoomIn: Bool { displayZoom < zoomMax - 0.001 }
     var canZoomOut: Bool { displayZoom > zoomMin + 0.001 }
 
-    func resetAnimated() {
-        bakeWork?.cancel()
-        let targetRubber = 1 / max(layoutZoom, 0.001)
-        setRubberScale(targetRubber)
-        scheduleBake(delay: 0.12)
+    /// Focal point in the viewport: cursor if present, else center.
+    func focalInViewport() -> CGPoint {
+        if let cursorInViewport { return cursorInViewport }
+        return CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
     }
 
-    func zoomInAnimated() {
+    func zoomInTowardFocal() {
         nudgeRubber(factor: 1.1)
     }
 
-    func zoomOutAnimated() {
+    func zoomOutTowardFocal() {
         nudgeRubber(factor: 1 / 1.1)
+    }
+
+    func resetTowardFocal() {
+        bakeWork?.cancel()
+        let targetDisplay: CGFloat = 1
+        let nextRubber = targetDisplay / max(layoutZoom, 0.001)
+        setRubberScale(nextRubber, focal: focalInViewport())
+        scheduleBake(delay: 0.12)
     }
 
     private func nudgeRubber(factor: CGFloat) {
         let targetDisplay = clamp(displayZoom * factor)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber)
+        setRubberScale(nextRubber, focal: focalInViewport())
         scheduleBake(delay: 0.14)
     }
 
@@ -300,50 +318,86 @@ private final class OrgGraphZoomState: ObservableObject {
             bakeWork?.cancel()
         }
         let targetDisplay = clamp(pinchDisplayBase * magnification)
-        setRubberScale(targetDisplay / max(layoutZoom, 0.001))
+        let nextRubber = targetDisplay / max(layoutZoom, 0.001)
+        let focal = CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
+        setRubberScale(nextRubber, focal: focal)
     }
 
     func endPinch() {
         isPinching = false
-        pinchDisplayBase = displayZoom
         bakeNow()
     }
 
-    func applyScrollStep(_ step: CGFloat) {
+    func panDragChanged(translation: CGSize) {
+        if !isPanning {
+            isPanning = true
+            panDragStart = panOffset
+        }
+        panOffset = CGSize(
+            width: panDragStart.width + translation.width,
+            height: panDragStart.height + translation.height
+        )
+    }
+
+    func panDragEnded() {
+        isPanning = false
+        panDragStart = panOffset
+    }
+
+    func applyScrollPan(deltaX: CGFloat, deltaY: CGFloat) {
+        panOffset = CGSize(
+            width: panOffset.width + deltaX,
+            height: panOffset.height + deltaY
+        )
+    }
+
+    func applyScrollZoom(step: CGFloat) {
         let targetDisplay = clamp(displayZoom + step)
-        setRubberScale(targetDisplay / max(layoutZoom, 0.001))
+        let nextRubber = targetDisplay / max(layoutZoom, 0.001)
+        setRubberScale(nextRubber, focal: focalInViewport())
         scheduleBake(delay: 0.14)
     }
 
-    /// Set rubber scale and keep the same document point under the viewport center.
-    private func setRubberScale(_ newRubber: CGFloat) {
-        let old = rubberScale
+    /// Change rubber scale while keeping the content point under `focal` fixed on screen.
+    private func setRubberScale(_ newRubber: CGFloat, focal: CGPoint) {
+        let old = max(rubberScale, 0.0001)
         let next = max(0.01, newRubber)
         guard abs(next - old) > 0.00001 else { return }
+        let factor = next / old
+        // screen = p * rubber + offset  → keep screen(focal content) constant
+        panOffset = CGSize(
+            width: focal.x - (focal.x - panOffset.width) * factor,
+            height: focal.y - (focal.y - panOffset.height) * factor
+        )
         rubberScale = next
-        scrollBridge.preserveCenter(oldRubber: old, newRubber: next)
     }
 
-    /// Collapse rubber into layout metrics (same visual size → swap blur for crisp type).
+    /// Place a content-space point at the viewport center.
+    func centerContentPoint(_ point: CGPoint, in viewport: CGSize) {
+        let r = max(rubberScale, 0.0001)
+        panOffset = CGSize(
+            width: viewport.width / 2 - point.x * r,
+            height: viewport.height / 2 - point.y * r
+        )
+    }
+
+    /// Bake rubber into layout. Offset stays — layout scales linearly with zoom.
     func bakeNow() {
         bakeWork?.cancel()
         bakeWork = nil
+        let oldRubber = rubberScale
         let baked = snap(displayZoom)
-        // Capture focal point before document size changes.
-        let normalized = scrollBridge.normalizedCenter()
+        // Content point p in old layout becomes ~p*oldRubber in new layout space.
+        // screen = p * oldRubber + offset (before)
+        // after: layout' = L*oldRubber (approx), rubber=1, same p' = p*oldRubber
+        // screen = p' * 1 + offset' = p*oldRubber + offset' → offset' = offset
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             layoutZoom = baked
             rubberScale = 1.0
-            pinchDisplayBase = baked
-        }
-        if let normalized {
-            scrollBridge.preserveNormalizedCenter(normalized)
-            // Second pass after layout settles.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
-                self?.scrollBridge.preserveNormalizedCenter(normalized)
-            }
+            // offset unchanged
+            _ = oldRubber
         }
     }
 
@@ -365,25 +419,29 @@ private final class OrgGraphZoomState: ObservableObject {
         return (clamped * 20).rounded() / 20
     }
 
-    /// ⌘ + scroll zooms graph content. (⌃+scroll is macOS screen zoom — do not use.)
-    func installCommandScrollMonitor() {
-        removeCommandScrollMonitor()
+    func installEventMonitors() {
+        removeEventMonitors()
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, self.isHovered else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags.contains(.command), !flags.contains(.control) else {
-                return event
+            let dx = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : event.scrollingDeltaX * 3
+            let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 3
+
+            if flags.contains(.command), !flags.contains(.control) {
+                let step = event.hasPreciseScrollingDeltas ? dy * 0.004 : dy * 0.06
+                DispatchQueue.main.async { self.applyScrollZoom(step: step) }
+                return nil
             }
-            let delta = event.scrollingDeltaY
-            let step = event.hasPreciseScrollingDeltas ? delta * 0.004 : delta * 0.06
+
+            // Plain scroll → pan (natural: finger up moves content down ⇒ add delta)
             DispatchQueue.main.async {
-                self.applyScrollStep(step)
+                self.applyScrollPan(deltaX: dx, deltaY: dy)
             }
             return nil
         }
     }
 
-    func removeCommandScrollMonitor() {
+    func removeEventMonitors() {
         bakeWork?.cancel()
         if let scrollMonitor {
             NSEvent.removeMonitor(scrollMonitor)
@@ -392,7 +450,7 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     deinit {
-        removeCommandScrollMonitor()
+        removeEventMonitors()
     }
 }
 
