@@ -4,7 +4,7 @@ import SwiftUI
 /// Staffs org graph — top is senior, below are reports.
 ///
 /// Zoom (smooth then crisp):
-/// - While ⌘+scrolling / pinching / tapping ±: only `scaleEffect` + pan offset (no graph rebuild).
+/// - While ⌘+scrolling / trackpad pinch (2 fingers) / tapping ±: only `scaleEffect` + pan offset.
 /// - After the user **stops** zooming (~0.3s idle): bake into layout metrics and regenerate the tree crisp.
 /// - Card-lock keeps the card under the pointer fixed for the whole gesture (desk-garden sized trees).
 /// Pan (drag / scroll without ⌘) clears the lock.
@@ -80,7 +80,8 @@ struct StaffsTreeView: View {
             .onHover { hovering in
                 zoomState.isHovered = hovering
             }
-            .simultaneousGesture(pinchZoomGesture)
+            // Prefer trackpad pinch over pan when both could match.
+            .highPriorityGesture(pinchZoomGesture)
             .onPreferenceChange(CardFrameKey.self) { frames in
                 zoomState.cardFrames = frames
                 zoomState.repinLockedCardIfNeeded()
@@ -144,7 +145,7 @@ struct StaffsTreeView: View {
 
     private var pinchZoomGesture: some Gesture {
         MagnificationGesture()
-            .onChanged { value in zoomState.applyPinch(value) }
+            .onChanged { value in zoomState.applySwiftUIPinch(value) }
             .onEnded { _ in zoomState.endPinch() }
     }
 
@@ -226,7 +227,7 @@ private final class OrgGraphZoomState: ObservableObject {
     private var isPinching = false
     private var isPanning = false
     private var panDragStart: CGSize = .zero
-    private var scrollMonitor: Any?
+    private var eventMonitor: Any?
     private var bakeWork: DispatchWorkItem?
     private var pendingRepin = false
 
@@ -272,8 +273,9 @@ private final class OrgGraphZoomState: ObservableObject {
         scheduleBake(delay: buttonBakeDelay)
     }
 
-    func applyPinch(_ magnification: CGFloat) {
-        let focal = CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
+    /// SwiftUI `MagnificationGesture` — value is absolute scale from gesture start (1.0…).
+    func applySwiftUIPinch(_ magnification: CGFloat) {
+        let focal = focalInViewport()
         if !isPinching {
             isPinching = true
             isLiveZooming = true
@@ -284,6 +286,29 @@ private final class OrgGraphZoomState: ObservableObject {
         let targetDisplay = clamp(pinchDisplayBase * magnification)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
         setLiveRubber(nextRubber, focal: focal)
+    }
+
+    /// AppKit trackpad pinch — `delta` is incremental (`event.magnification`).
+    func applyTrackpadMagnify(delta: CGFloat, phase: NSEvent.Phase) {
+        let focal = focalInViewport()
+        if phase.contains(.began) || !isPinching {
+            isPinching = true
+            isLiveZooming = true
+            ensureLock(at: focal)
+            bakeWork?.cancel()
+        }
+        // Incremental: newZoom = current * (1 + delta)
+        let targetDisplay = clamp(displayZoom * (1 + delta))
+        let nextRubber = targetDisplay / max(layoutZoom, 0.001)
+        setLiveRubber(nextRubber, focal: focal)
+
+        if phase.contains(.ended) || phase.contains(.cancelled) {
+            isPinching = false
+            scheduleBake(delay: 0.05)
+        } else {
+            // Some devices omit ended — idle bake when fingers stop.
+            scheduleBake(delay: idleBakeDelay)
+        }
     }
 
     func endPinch() {
@@ -485,8 +510,19 @@ private final class OrgGraphZoomState: ObservableObject {
 
     func installEventMonitors() {
         removeEventMonitors()
-        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify]) { [weak self] event in
             guard let self, self.isHovered else { return event }
+
+            // Trackpad pinch (2 fingers) — native magnify events.
+            if event.type == .magnify {
+                let delta = event.magnification
+                let phase = event.phase
+                DispatchQueue.main.async {
+                    self.applyTrackpadMagnify(delta: delta, phase: phase)
+                }
+                return nil
+            }
+
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let dx = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : event.scrollingDeltaX * 3
             let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 3
@@ -504,9 +540,9 @@ private final class OrgGraphZoomState: ObservableObject {
 
     func removeEventMonitors() {
         bakeWork?.cancel()
-        if let scrollMonitor {
-            NSEvent.removeMonitor(scrollMonitor)
-            self.scrollMonitor = nil
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
         }
     }
 

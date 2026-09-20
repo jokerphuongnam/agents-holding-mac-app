@@ -53,7 +53,7 @@
 "no_staffs_in_team" = "Không có staff trong team này";
 "staffs_tree" = "Staffs tree";
 "staffs_tree_empty" = "Không có staff để hiện cây tổ chức";
-"staffs_tree_help" = "Trên là cấp trên, dưới là cấp dưới. ⌘+lăn chuột zoom quanh card dưới con trỏ (scale mượt; dừng mới generate lại graph); kéo/cuộn để pan.";
+"staffs_tree_help" = "Trên là cấp trên, dưới là cấp dưới. Pinch 2 ngón hoặc ⌘+lăn chuột để zoom quanh card dưới con trỏ; kéo/cuộn để pan. Dừng zoom mới generate lại graph.";
 "staffs_tree_zoom_reset" = "Reset zoom";
 "staffs_tree_zoom_in" = "Phóng to";
 "staffs_tree_zoom_out" = "Thu nhỏ";
