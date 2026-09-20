@@ -2,11 +2,12 @@ import AppKit
 import SwiftUI
 
 /// Staffs org graph — top is senior, below are reports.
-/// Zoom/pan model (keeps a card under the cursor/center stable):
-/// - content laid out at `layoutZoom` (crisp after bake)
-/// - live `rubberScale` + `panOffset` transform: screen = point * rubber + offset
-/// - ⌘+scroll / ± buttons / pinch zoom **around the focal point** (cursor or viewport center)
-/// - drag or plain scroll pans; viewport chrome stays fixed
+///
+/// Zoom is **card-locked** (desk-garden sized trees):
+/// 1. On zoom start, lock the card under the pointer (or nearest / viewport-center card).
+/// 2. Every scale change re-pins that same point on the card under the focal screen point.
+/// 3. After layout bake, re-pin again when new card frames arrive.
+/// Pan (drag / scroll without ⌘) clears the lock.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     let onSelect: (StaffNode) -> Void
@@ -14,7 +15,6 @@ struct StaffsTreeView: View {
     private let viewportMaxHeight: CGFloat = 560
 
     @StateObject private var zoomState = OrgGraphZoomState()
-    @State private var viewportSize: CGSize = .zero
     @State private var didCenterCEO = false
 
     private var focusStaffId: String? {
@@ -58,14 +58,6 @@ struct StaffsTreeView: View {
         GeometryReader { viewportGeo in
             ZStack(alignment: .topLeading) {
                 graphContent
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: OrgContentSizeKey.self,
-                                value: geo.size
-                            )
-                        }
-                    )
                     .scaleEffect(zoomState.rubberScale, anchor: .topLeading)
                     .offset(zoomState.panOffset)
                     .gesture(panDragGesture)
@@ -73,14 +65,12 @@ struct StaffsTreeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipped()
             .contentShape(Rectangle())
+            .background(ViewportHostView(bridge: zoomState.viewportBridge))
             .onAppear {
-                viewportSize = viewportGeo.size
                 zoomState.viewportSize = viewportGeo.size
                 zoomState.installEventMonitors()
-                centerCEOIfNeeded()
             }
             .onChange(of: viewportGeo.size) { _, newSize in
-                viewportSize = newSize
                 zoomState.viewportSize = newSize
             }
             .onDisappear {
@@ -88,18 +78,12 @@ struct StaffsTreeView: View {
             }
             .onHover { hovering in
                 zoomState.isHovered = hovering
-                if !hovering { zoomState.cursorInViewport = nil }
-            }
-            .overlay {
-                ViewportCursorTracker { point in
-                    zoomState.cursorInViewport = point
-                }
-                .allowsHitTesting(false)
             }
             .simultaneousGesture(pinchZoomGesture)
             .onPreferenceChange(CardFrameKey.self) { frames in
                 zoomState.cardFrames = frames
-                centerCEOIfNeeded()
+                zoomState.repinLockedCardIfNeeded()
+                centerCEOIfNeeded(viewport: viewportGeo.size)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight)
@@ -109,9 +93,7 @@ struct StaffsTreeView: View {
 
     private var zoomToolbar: some View {
         HStack(spacing: 6) {
-            Button {
-                zoomState.zoomOutTowardFocal()
-            } label: {
+            Button { zoomState.zoomOutTowardFocal() } label: {
                 Image(systemName: "minus.magnifyingglass")
             }
             .buttonStyle(.borderless)
@@ -124,9 +106,7 @@ struct StaffsTreeView: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 36, alignment: .center)
 
-            Button {
-                zoomState.zoomInTowardFocal()
-            } label: {
+            Button { zoomState.zoomInTowardFocal() } label: {
                 Image(systemName: "plus.magnifyingglass")
             }
             .buttonStyle(.borderless)
@@ -134,146 +114,110 @@ struct StaffsTreeView: View {
             .disabled(!zoomState.canZoomIn)
             .accessibilityLabel(L10n.staffsTreeZoomIn)
 
-            Button(L10n.staffsTreeZoomReset) {
-                zoomState.resetTowardFocal()
-            }
-            .buttonStyle(.borderless)
-            .disabled(abs(zoomState.displayZoom - 1) < 0.01)
+            Button(L10n.staffsTreeZoomReset) { zoomState.resetTowardFocal() }
+                .buttonStyle(.borderless)
+                .disabled(abs(zoomState.displayZoom - 1) < 0.01)
         }
         .controlSize(.small)
     }
 
     private var graphContent: some View {
         let layout = self.layout
-        return VStack(alignment: .center, spacing: layout.rootSpacing) {
+        return VStack(alignment: .leading, spacing: layout.rootSpacing) {
             ForEach(roots) { root in
                 OrgNodeView(node: root, depth: 0, layout: layout, onSelect: onSelect)
             }
         }
         .padding(layout.padding)
-        .frame(minWidth: 320 * layout.zoom, alignment: .top)
+        // topLeading so layoutZoom bake scales from a stable origin (desk-garden wide trees).
+        .frame(minWidth: 320 * layout.zoom, alignment: .topLeading)
         .coordinateSpace(name: OrgChartSpace.name)
     }
 
     private var panDragGesture: some Gesture {
         DragGesture()
-            .onChanged { value in
-                zoomState.panDragChanged(translation: value.translation)
-            }
-            .onEnded { _ in
-                zoomState.panDragEnded()
-            }
+            .onChanged { value in zoomState.panDragChanged(translation: value.translation) }
+            .onEnded { _ in zoomState.panDragEnded() }
     }
 
     private var pinchZoomGesture: some Gesture {
         MagnificationGesture()
-            .onChanged { value in
-                zoomState.applyPinch(value)
-            }
-            .onEnded { _ in
-                zoomState.endPinch()
-            }
+            .onChanged { value in zoomState.applyPinch(value) }
+            .onEnded { _ in zoomState.endPinch() }
     }
 
-    /// Place CEO under the viewport center once frames are known.
-    private func centerCEOIfNeeded() {
-        guard !didCenterCEO,
-              let focusStaffId,
-              viewportSize.width > 1,
-              viewportSize.height > 1
-        else { return }
-        let anchorId = OrgScrollAnchor.card(focusStaffId)
-        // CardFrameKey stores raw card frames; OrgNodeView publishes staff.id keys via cardAnchor.
-        // Prefer staff id key used by CardFrameKey (staff.id), not scroll anchor string.
-        guard let frame = zoomState.cardFrames[focusStaffId] ?? zoomState.cardFrames[anchorId]
-        else { return }
-        zoomState.centerContentPoint(
-            CGPoint(x: frame.midX, y: frame.midY),
-            in: viewportSize
-        )
+    private func centerCEOIfNeeded(viewport: CGSize) {
+        guard !didCenterCEO, let focusStaffId, viewport.width > 1, viewport.height > 1 else { return }
+        guard let frame = zoomState.cardFrames[focusStaffId] else { return }
+        zoomState.centerContentPoint(CGPoint(x: frame.midX, y: frame.midY), in: viewport)
         didCenterCEO = true
     }
 }
 
-// MARK: - Cursor tracking (focal point for ⌘+scroll)
+// MARK: - Viewport host (mouse → focal in view coords)
 
-private struct ViewportCursorTracker: NSViewRepresentable {
-    let onMove: (CGPoint?) -> Void
+private final class ViewportBridge {
+    weak var view: NSView?
 
-    final class Coordinator {
-        var onMove: (CGPoint?) -> Void
-        init(onMove: @escaping (CGPoint?) -> Void) { self.onMove = onMove }
+    /// Mouse location in the viewport view's flipped coordinates.
+    func mouseInView() -> CGPoint? {
+        guard let view, let window = view.window else { return nil }
+        let mouseInWindow = window.mouseLocationOutsideOfEventStream
+        var p = view.convert(mouseInWindow, from: nil)
+        if !view.isFlipped {
+            p.y = view.bounds.height - p.y
+        }
+        guard view.bounds.insetBy(dx: -1, dy: -1).contains(p) else { return nil }
+        return CGPoint(x: p.x, y: p.y)
     }
+}
 
-    func makeCoordinator() -> Coordinator { Coordinator(onMove: onMove) }
+private struct ViewportHostView: NSViewRepresentable {
+    let bridge: ViewportBridge
 
     func makeNSView(context: Context) -> NSView {
-        let view = CursorNSView()
-        view.coordinator = context.coordinator
+        let view = NSView()
+        view.wantsLayer = false
+        DispatchQueue.main.async { bridge.view = view.superview ?? view }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.onMove = onMove
-        (nsView as? CursorNSView)?.coordinator = context.coordinator
-    }
-
-    private final class CursorNSView: NSView {
-        weak var coordinator: Coordinator?
-        private var area: NSTrackingArea?
-
-        override var isFlipped: Bool { true }
-
-        /// Let clicks reach SwiftUI cards underneath.
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-            if let area { removeTrackingArea(area) }
-            let options: NSTrackingArea.Options = [
-                .activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect,
-            ]
-            let newArea = NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil)
-            addTrackingArea(newArea)
-            area = newArea
-        }
-
-        override func mouseMoved(with event: NSEvent) {
-            let p = convert(event.locationInWindow, from: nil)
-            coordinator?.onMove(p)
-        }
-
-        override func mouseEntered(with event: NSEvent) {
-            let p = convert(event.locationInWindow, from: nil)
-            coordinator?.onMove(p)
-        }
-
-        override func mouseExited(with event: NSEvent) {
-            coordinator?.onMove(nil)
+        DispatchQueue.main.async {
+            // Prefer the SwiftUI-backed superview that fills the viewport.
+            bridge.view = nsView.superview ?? nsView
         }
     }
 }
 
-// MARK: - Zoom / pan state (focal-point stable)
+// MARK: - Card lock + zoom / pan
 
-/// screen = contentPoint * rubberScale + panOffset  (topLeading scale)
+private struct CardLock: Equatable {
+    var id: String
+    /// Point inside the card, relative 0...1 (0.5,0.5 = card center).
+    var rel: CGPoint
+}
+
+/// screen = contentPoint * rubberScale + panOffset (scale anchor = topLeading)
 private final class OrgGraphZoomState: ObservableObject {
     @Published var layoutZoom: CGFloat = 1.0
     @Published var rubberScale: CGFloat = 1.0
     @Published var panOffset: CGSize = .zero
 
+    let viewportBridge = ViewportBridge()
     var isHovered = false
     var viewportSize: CGSize = .zero
-    /// Cursor in viewport coords (flipped / SwiftUI-like topLeading).
-    var cursorInViewport: CGPoint?
     var cardFrames: [String: CGRect] = [:]
 
+    private var lock: CardLock?
+    private var lockedFocal: CGPoint?
     private var pinchDisplayBase: CGFloat = 1.0
     private var isPinching = false
     private var isPanning = false
     private var panDragStart: CGSize = .zero
     private var scrollMonitor: Any?
     private var bakeWork: DispatchWorkItem?
+    private var pendingRepin = false
 
     private let zoomMin: CGFloat = 0.5
     private let zoomMax: CGFloat = 2.0
@@ -282,44 +226,45 @@ private final class OrgGraphZoomState: ObservableObject {
     var canZoomIn: Bool { displayZoom < zoomMax - 0.001 }
     var canZoomOut: Bool { displayZoom > zoomMin + 0.001 }
 
-    /// Focal point in the viewport: cursor if present, else center.
+    /// Prefer live mouse in viewport; else viewport center.
     func focalInViewport() -> CGPoint {
-        if let cursorInViewport { return cursorInViewport }
+        if let mouse = viewportBridge.mouseInView() {
+            return mouse
+        }
         return CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
     }
 
-    func zoomInTowardFocal() {
-        nudgeRubber(factor: 1.1)
-    }
-
-    func zoomOutTowardFocal() {
-        nudgeRubber(factor: 1 / 1.1)
-    }
+    func zoomInTowardFocal() { nudgeRubber(factor: 1.1) }
+    func zoomOutTowardFocal() { nudgeRubber(factor: 1 / 1.1) }
 
     func resetTowardFocal() {
         bakeWork?.cancel()
-        let targetDisplay: CGFloat = 1
-        let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focalInViewport())
+        let focal = focalInViewport()
+        ensureLock(at: focal)
+        let nextRubber = 1 / max(layoutZoom, 0.001)
+        setRubberScale(nextRubber, focal: focal)
         scheduleBake(delay: 0.12)
     }
 
     private func nudgeRubber(factor: CGFloat) {
+        let focal = focalInViewport()
+        ensureLock(at: focal)
         let targetDisplay = clamp(displayZoom * factor)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focalInViewport())
+        setRubberScale(nextRubber, focal: focal)
         scheduleBake(delay: 0.14)
     }
 
     func applyPinch(_ magnification: CGFloat) {
+        let focal = CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
         if !isPinching {
             isPinching = true
             pinchDisplayBase = displayZoom
+            ensureLock(at: focal)
             bakeWork?.cancel()
         }
         let targetDisplay = clamp(pinchDisplayBase * magnification)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        let focal = CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
         setRubberScale(nextRubber, focal: focal)
     }
 
@@ -332,6 +277,7 @@ private final class OrgGraphZoomState: ObservableObject {
         if !isPanning {
             isPanning = true
             panDragStart = panOffset
+            clearLock()
         }
         panOffset = CGSize(
             width: panDragStart.width + translation.width,
@@ -345,6 +291,7 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     func applyScrollPan(deltaX: CGFloat, deltaY: CGFloat) {
+        clearLock()
         panOffset = CGSize(
             width: panOffset.width + deltaX,
             height: panOffset.height + deltaY
@@ -352,27 +299,101 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     func applyScrollZoom(step: CGFloat) {
+        let focal = focalInViewport()
+        ensureLock(at: focal)
         let targetDisplay = clamp(displayZoom + step)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focalInViewport())
+        setRubberScale(nextRubber, focal: focal)
         scheduleBake(delay: 0.14)
     }
 
-    /// Change rubber scale while keeping the content point under `focal` fixed on screen.
     private func setRubberScale(_ newRubber: CGFloat, focal: CGPoint) {
-        let old = max(rubberScale, 0.0001)
         let next = max(0.01, newRubber)
-        guard abs(next - old) > 0.00001 else { return }
-        let factor = next / old
-        // screen = p * rubber + offset  → keep screen(focal content) constant
-        panOffset = CGSize(
-            width: focal.x - (focal.x - panOffset.width) * factor,
-            height: focal.y - (focal.y - panOffset.height) * factor
-        )
+        guard abs(next - rubberScale) > 0.00001 else {
+            repin(focal: focal)
+            return
+        }
         rubberScale = next
+        lockedFocal = focal
+        repin(focal: focal)
     }
 
-    /// Place a content-space point at the viewport center.
+    /// Keep the locked card point glued under `focal`.
+    private func repin(focal: CGPoint) {
+        guard let lock, let frame = cardFrames[lock.id] else { return }
+        let contentPt = CGPoint(
+            x: frame.minX + lock.rel.x * frame.width,
+            y: frame.minY + lock.rel.y * frame.height
+        )
+        panOffset = CGSize(
+            width: focal.x - contentPt.x * rubberScale,
+            height: focal.y - contentPt.y * rubberScale
+        )
+        lockedFocal = focal
+    }
+
+    func repinLockedCardIfNeeded() {
+        guard pendingRepin || lock != nil, let focal = lockedFocal ?? optionalCenterFocal() else { return }
+        repin(focal: focal)
+        pendingRepin = false
+    }
+
+    private func optionalCenterFocal() -> CGPoint? {
+        guard viewportSize.width > 1 else { return nil }
+        return CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
+    }
+
+    private func ensureLock(at focal: CGPoint) {
+        if lock != nil { return }
+        let contentPt = contentPoint(atViewport: focal)
+        lock = makeLock(for: contentPt)
+        lockedFocal = focal
+    }
+
+    private func clearLock() {
+        lock = nil
+        lockedFocal = nil
+        pendingRepin = false
+    }
+
+    private func contentPoint(atViewport focal: CGPoint) -> CGPoint {
+        let r = max(rubberScale, 0.0001)
+        return CGPoint(
+            x: (focal.x - panOffset.width) / r,
+            y: (focal.y - panOffset.height) / r
+        )
+    }
+
+    /// Lock card under point; if none, nearest card center (desk-garden dense fans).
+    private func makeLock(for contentPt: CGPoint) -> CardLock? {
+        guard !cardFrames.isEmpty else { return nil }
+        var containing: (id: String, frame: CGRect)?
+        var nearest: (id: String, frame: CGRect, dist: CGFloat)?
+        for (id, frame) in cardFrames {
+            if frame.contains(contentPt) {
+                containing = (id, frame)
+                break
+            }
+            let d = hypot(frame.midX - contentPt.x, frame.midY - contentPt.y)
+            if nearest == nil || d < nearest!.dist {
+                nearest = (id, frame, d)
+            }
+        }
+        let picked = containing ?? nearest.map { ($0.id, $0.frame) }
+        guard let picked else { return nil }
+        let frame = picked.1
+        let rel: CGPoint
+        if containing != nil {
+            rel = CGPoint(
+                x: frame.width > 0 ? (contentPt.x - frame.minX) / frame.width : 0.5,
+                y: frame.height > 0 ? (contentPt.y - frame.minY) / frame.height : 0.5
+            )
+        } else {
+            rel = CGPoint(x: 0.5, y: 0.5)
+        }
+        return CardLock(id: picked.0, rel: rel)
+    }
+
     func centerContentPoint(_ point: CGPoint, in viewport: CGSize) {
         let r = max(rubberScale, 0.0001)
         panOffset = CGSize(
@@ -381,42 +402,39 @@ private final class OrgGraphZoomState: ObservableObject {
         )
     }
 
-    /// Bake rubber into layout. Offset stays — layout scales linearly with zoom.
+    /// Bake rubber → layout. Exact multiply (no snap) + repin locked card after frames refresh.
     func bakeNow() {
         bakeWork?.cancel()
         bakeWork = nil
-        let oldRubber = rubberScale
-        let baked = snap(displayZoom)
-        // Content point p in old layout becomes ~p*oldRubber in new layout space.
-        // screen = p * oldRubber + offset (before)
-        // after: layout' = L*oldRubber (approx), rubber=1, same p' = p*oldRubber
-        // screen = p' * 1 + offset' = p*oldRubber + offset' → offset' = offset
+        let focal = lockedFocal ?? focalInViewport()
+        ensureLock(at: focal)
+        let r = rubberScale
+        guard abs(r - 1) > 0.0001 else { return }
+        let newLayout = clamp(layoutZoom * r)
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            layoutZoom = baked
+            layoutZoom = newLayout
             rubberScale = 1.0
-            // offset unchanged
-            _ = oldRubber
+        }
+        lockedFocal = focal
+        pendingRepin = true
+        // Frames update async; also attempt immediate repin with scaled guess.
+        // Relative lock inside card remains valid after uniform-ish layout scale.
+        DispatchQueue.main.async { [weak self] in
+            self?.repinLockedCardIfNeeded()
         }
     }
 
     private func scheduleBake(delay: TimeInterval) {
         bakeWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            self?.bakeNow()
-        }
+        let work = DispatchWorkItem { [weak self] in self?.bakeNow() }
         bakeWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func clamp(_ value: CGFloat) -> CGFloat {
         min(max(value, zoomMin), zoomMax)
-    }
-
-    private func snap(_ value: CGFloat) -> CGFloat {
-        let clamped = clamp(value)
-        return (clamped * 20).rounded() / 20
     }
 
     func installEventMonitors() {
@@ -433,10 +451,7 @@ private final class OrgGraphZoomState: ObservableObject {
                 return nil
             }
 
-            // Plain scroll → pan (natural: finger up moves content down ⇒ add delta)
-            DispatchQueue.main.async {
-                self.applyScrollPan(deltaX: dx, deltaY: dy)
-            }
+            DispatchQueue.main.async { self.applyScrollPan(deltaX: dx, deltaY: dy) }
             return nil
         }
     }
@@ -449,23 +464,11 @@ private final class OrgGraphZoomState: ObservableObject {
         }
     }
 
-    deinit {
-        removeEventMonitors()
-    }
+    deinit { removeEventMonitors() }
 }
 
 private enum OrgScrollAnchor {
     static func card(_ staffId: String) -> String { "org-card-\(staffId)" }
-}
-
-private struct OrgContentSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        let next = nextValue()
-        if next.width * next.height > value.width * value.height {
-            value = next
-        }
-    }
 }
 
 // MARK: - Layout (committed zoom multiplies real sizes)
