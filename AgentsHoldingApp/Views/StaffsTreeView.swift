@@ -3,10 +3,10 @@ import SwiftUI
 
 /// Staffs org graph — top is senior, below are reports.
 ///
-/// Zoom is **card-locked** (desk-garden sized trees):
-/// 1. On zoom start, lock the card under the pointer (or nearest / viewport-center card).
-/// 2. Every scale change re-pins that same point on the card under the focal screen point.
-/// 3. After layout bake, re-pin again when new card frames arrive.
+/// Zoom (smooth then crisp):
+/// - While ⌘+scrolling / pinching / tapping ±: only `scaleEffect` + pan offset (no graph rebuild).
+/// - After the user **stops** zooming (~0.3s idle): bake into layout metrics and regenerate the tree crisp.
+/// - Card-lock keeps the card under the pointer fixed for the whole gesture (desk-garden sized trees).
 /// Pan (drag / scroll without ⌘) clears the lock.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
@@ -58,8 +58,9 @@ struct StaffsTreeView: View {
         GeometryReader { viewportGeo in
             ZStack(alignment: .topLeading) {
                 graphContent
-                    .scaleEffect(zoomState.rubberScale, anchor: .topLeading)
-                    .offset(zoomState.panOffset)
+                    // Live zoom is cheap scale only — layoutZoom rebuild waits until idle bake.
+                    .scaleEffect(zoomState.live.rubber, anchor: .topLeading)
+                    .offset(zoomState.live.offset)
                     .gesture(panDragGesture)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -105,6 +106,7 @@ struct StaffsTreeView: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 36, alignment: .center)
+                .opacity(zoomState.isLiveZooming ? 0.7 : 1)
 
             Button { zoomState.zoomInTowardFocal() } label: {
                 Image(systemName: "plus.magnifyingglass")
@@ -116,7 +118,7 @@ struct StaffsTreeView: View {
 
             Button(L10n.staffsTreeZoomReset) { zoomState.resetTowardFocal() }
                 .buttonStyle(.borderless)
-                .disabled(abs(zoomState.displayZoom - 1) < 0.01)
+                .disabled(abs(zoomState.displayZoom - 1) < 0.01 && abs(zoomState.live.rubber - 1) < 0.01)
         }
         .controlSize(.small)
     }
@@ -198,11 +200,20 @@ private struct CardLock: Equatable {
     var rel: CGPoint
 }
 
-/// screen = contentPoint * rubberScale + panOffset (scale anchor = topLeading)
+/// Live transform published as one value so each scroll tick only refreshes once.
+private struct LiveZoomTransform: Equatable {
+    var rubber: CGFloat = 1.0
+    var offset: CGSize = .zero
+}
+
+/// screen = contentPoint * live.rubber + live.offset (scale anchor = topLeading)
+///
+/// While the user is zooming: mutate `live` only (scaleEffect).
+/// When idle: bake into `layoutZoom` and regenerate the graph for sharp text.
 private final class OrgGraphZoomState: ObservableObject {
     @Published var layoutZoom: CGFloat = 1.0
-    @Published var rubberScale: CGFloat = 1.0
-    @Published var panOffset: CGSize = .zero
+    @Published var live = LiveZoomTransform()
+    @Published private(set) var isLiveZooming = false
 
     let viewportBridge = ViewportBridge()
     var isHovered = false
@@ -221,8 +232,11 @@ private final class OrgGraphZoomState: ObservableObject {
 
     private let zoomMin: CGFloat = 0.5
     private let zoomMax: CGFloat = 2.0
+    /// Wait until scroll/pinch stops before regenerating the tree.
+    private let idleBakeDelay: TimeInterval = 0.32
+    private let buttonBakeDelay: TimeInterval = 0.22
 
-    var displayZoom: CGFloat { layoutZoom * rubberScale }
+    var displayZoom: CGFloat { layoutZoom * live.rubber }
     var canZoomIn: Bool { displayZoom < zoomMax - 0.001 }
     var canZoomOut: Bool { displayZoom > zoomMin + 0.001 }
 
@@ -239,102 +253,130 @@ private final class OrgGraphZoomState: ObservableObject {
 
     func resetTowardFocal() {
         bakeWork?.cancel()
+        isLiveZooming = true
         let focal = focalInViewport()
         ensureLock(at: focal)
         let nextRubber = 1 / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focal)
-        scheduleBake(delay: 0.12)
+        setLiveRubber(nextRubber, focal: focal)
+        scheduleBake(delay: buttonBakeDelay)
     }
 
     private func nudgeRubber(factor: CGFloat) {
+        bakeWork?.cancel()
+        isLiveZooming = true
         let focal = focalInViewport()
         ensureLock(at: focal)
         let targetDisplay = clamp(displayZoom * factor)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focal)
-        scheduleBake(delay: 0.14)
+        setLiveRubber(nextRubber, focal: focal)
+        scheduleBake(delay: buttonBakeDelay)
     }
 
     func applyPinch(_ magnification: CGFloat) {
         let focal = CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
         if !isPinching {
             isPinching = true
+            isLiveZooming = true
             pinchDisplayBase = displayZoom
             ensureLock(at: focal)
             bakeWork?.cancel()
         }
         let targetDisplay = clamp(pinchDisplayBase * magnification)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focal)
+        setLiveRubber(nextRubber, focal: focal)
     }
 
     func endPinch() {
         isPinching = false
-        bakeNow()
+        // Regenerate once the pinch finishes (not during the gesture).
+        scheduleBake(delay: 0.05)
     }
 
     func panDragChanged(translation: CGSize) {
         if !isPanning {
             isPanning = true
-            panDragStart = panOffset
+            panDragStart = live.offset
             clearLock()
+            // Panning cancels a pending regenerate — keep current rubber until idle zoom again.
+            bakeWork?.cancel()
         }
-        panOffset = CGSize(
+        var next = live
+        next.offset = CGSize(
             width: panDragStart.width + translation.width,
             height: panDragStart.height + translation.height
         )
+        live = next
     }
 
     func panDragEnded() {
         isPanning = false
-        panDragStart = panOffset
+        panDragStart = live.offset
     }
 
     func applyScrollPan(deltaX: CGFloat, deltaY: CGFloat) {
         clearLock()
-        panOffset = CGSize(
-            width: panOffset.width + deltaX,
-            height: panOffset.height + deltaY
+        bakeWork?.cancel()
+        var next = live
+        next.offset = CGSize(
+            width: live.offset.width + deltaX,
+            height: live.offset.height + deltaY
         )
+        live = next
     }
 
     func applyScrollZoom(step: CGFloat) {
+        bakeWork?.cancel()
+        isLiveZooming = true
         let focal = focalInViewport()
         ensureLock(at: focal)
         let targetDisplay = clamp(displayZoom + step)
         let nextRubber = targetDisplay / max(layoutZoom, 0.001)
-        setRubberScale(nextRubber, focal: focal)
-        scheduleBake(delay: 0.14)
+        setLiveRubber(nextRubber, focal: focal)
+        // Only regenerate after the user stops scrolling.
+        scheduleBake(delay: idleBakeDelay)
     }
 
-    private func setRubberScale(_ newRubber: CGFloat, focal: CGPoint) {
+    /// Live scale only — does not touch `layoutZoom` / does not rebuild the graph.
+    private func setLiveRubber(_ newRubber: CGFloat, focal: CGPoint) {
+        let old = max(live.rubber, 0.0001)
         let next = max(0.01, newRubber)
-        guard abs(next - rubberScale) > 0.00001 else {
-            repin(focal: focal)
-            return
+        guard abs(next - old) > 0.00001 else { return }
+        let factor = next / old
+        // Keep the content point under `focal` fixed (smooth; no frame lookup needed).
+        var transform = live
+        transform.offset = CGSize(
+            width: focal.x - (focal.x - live.offset.width) * factor,
+            height: focal.y - (focal.y - live.offset.height) * factor
+        )
+        transform.rubber = next
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            live = transform
         }
-        rubberScale = next
         lockedFocal = focal
-        repin(focal: focal)
     }
 
-    /// Keep the locked card point glued under `focal`.
-    private func repin(focal: CGPoint) {
+    /// After layout regenerate, glue the locked card back under the focal point.
+    private func repinFromCardFrames(focal: CGPoint) {
         guard let lock, let frame = cardFrames[lock.id] else { return }
         let contentPt = CGPoint(
             x: frame.minX + lock.rel.x * frame.width,
             y: frame.minY + lock.rel.y * frame.height
         )
-        panOffset = CGSize(
-            width: focal.x - contentPt.x * rubberScale,
-            height: focal.y - contentPt.y * rubberScale
+        var transform = live
+        transform.offset = CGSize(
+            width: focal.x - contentPt.x * live.rubber,
+            height: focal.y - contentPt.y * live.rubber
         )
+        live = transform
         lockedFocal = focal
     }
 
     func repinLockedCardIfNeeded() {
-        guard pendingRepin || lock != nil, let focal = lockedFocal ?? optionalCenterFocal() else { return }
-        repin(focal: focal)
+        // Only after bake — never during live scaleEffect zoom (avoids jitter).
+        guard pendingRepin, let focal = lockedFocal ?? optionalCenterFocal() else { return }
+        repinFromCardFrames(focal: focal)
         pendingRepin = false
     }
 
@@ -357,10 +399,10 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     private func contentPoint(atViewport focal: CGPoint) -> CGPoint {
-        let r = max(rubberScale, 0.0001)
+        let r = max(live.rubber, 0.0001)
         return CGPoint(
-            x: (focal.x - panOffset.width) / r,
-            y: (focal.y - panOffset.height) / r
+            x: (focal.x - live.offset.width) / r,
+            y: (focal.y - live.offset.height) / r
         )
     }
 
@@ -395,32 +437,36 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     func centerContentPoint(_ point: CGPoint, in viewport: CGSize) {
-        let r = max(rubberScale, 0.0001)
-        panOffset = CGSize(
+        let r = max(live.rubber, 0.0001)
+        var transform = live
+        transform.offset = CGSize(
             width: viewport.width / 2 - point.x * r,
             height: viewport.height / 2 - point.y * r
         )
+        live = transform
     }
 
-    /// Bake rubber → layout. Exact multiply (no snap) + repin locked card after frames refresh.
+    /// Idle: regenerate graph at the new zoom (crisp), then re-pin the locked card.
     func bakeNow() {
         bakeWork?.cancel()
         bakeWork = nil
         let focal = lockedFocal ?? focalInViewport()
         ensureLock(at: focal)
-        let r = rubberScale
-        guard abs(r - 1) > 0.0001 else { return }
+        let r = live.rubber
+        guard abs(r - 1) > 0.0001 else {
+            isLiveZooming = false
+            return
+        }
         let newLayout = clamp(layoutZoom * r)
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             layoutZoom = newLayout
-            rubberScale = 1.0
+            live = LiveZoomTransform(rubber: 1.0, offset: live.offset)
+            isLiveZooming = false
         }
         lockedFocal = focal
         pendingRepin = true
-        // Frames update async; also attempt immediate repin with scaled guess.
-        // Relative lock inside card remains valid after uniform-ish layout scale.
         DispatchQueue.main.async { [weak self] in
             self?.repinLockedCardIfNeeded()
         }

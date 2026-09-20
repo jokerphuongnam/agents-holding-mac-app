@@ -53,7 +53,7 @@
 "no_staffs_in_team" = "No staffs in this team";
 "staffs_tree" = "Staffs tree";
 "staffs_tree_empty" = "No staffs to show in the org tree";
-"staffs_tree_help" = "Top is senior, below are reports. ⌘+scroll zooms around the card under the pointer; drag/scroll to pan. Large teams (e.g. desk-garden) split left/right.";
+"staffs_tree_help" = "Top is senior, below are reports. ⌘+scroll zooms around the card under the pointer (smooth scale; graph regenerates when you stop); drag/scroll to pan.";
 "staffs_tree_zoom_reset" = "Reset zoom";
 "staffs_tree_zoom_in" = "Zoom in";
 "staffs_tree_zoom_out" = "Zoom out";
