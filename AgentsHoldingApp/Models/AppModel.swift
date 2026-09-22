@@ -94,7 +94,7 @@ final class AppModel: ObservableObject {
     func openStaffNamed(_ name: String) {
         let inHolding = openCompany == nil
         let teams = inHolding ? (holding?.teams ?? []) : (openCompany?.teams ?? [])
-        if let node = teams.flatMap(\.staffs).first(where: { $0.name == name }) {
+        if let node = teams.flatMap(\.allStaffs).first(where: { $0.name == name }) {
             openStaff(node, inHolding: inHolding)
             return
         }
@@ -104,7 +104,8 @@ final class AppModel: ObservableObject {
             lastError = "No company/holding root to open staff \(name)"
             return
         }
-        for team in teams.map(\.name) + ["leadership"] {
+        let teamPaths = teams.flatMap { collectTeamIDs($0) } + ["leadership"]
+        for team in teamPaths {
             if let detail = staffDirectory.loadStaffDetail(name: name, team: team, companyRoot: root) {
                 staffDetail = detail
                 openSkill = nil
@@ -114,6 +115,10 @@ final class AppModel: ObservableObject {
             }
         }
         lastError = "Staff not found: \(name)"
+    }
+
+    private func collectTeamIDs(_ team: TeamNode) -> [String] {
+        [team.id] + team.childTeams.flatMap { collectTeamIDs($0) }
     }
 
     func openSkill(_ skill: SkillRef) {
@@ -150,7 +155,7 @@ final class AppModel: ObservableObject {
             if let detail = staffDetail, detail.node.name == name {
                 selection = .staff(detail.node.id)
             } else if let node = (inHolding ? holding?.teams : openCompany?.teams)?
-                .flatMap(\.staffs)
+                .flatMap(\.allStaffs)
                 .first(where: { $0.name == name }) {
                 openStaff(node, inHolding: inHolding)
             } else if let company = openCompany?.node, !inHolding {

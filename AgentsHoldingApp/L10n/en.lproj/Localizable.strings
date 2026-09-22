@@ -51,6 +51,7 @@
 "teams_staffs" = "Teams & staffs";
 "no_teams" = "No teams under system/staffs";
 "no_staffs_in_team" = "No staffs in this team";
+"child_teams_hop" = "Child teams — hop one rank (their lead only)";
 "staffs_tree" = "Staffs tree";
 "staffs_tree_empty" = "No staffs to show in the org tree";
 "staffs_tree_help" = "Top is senior, below are reports. Pinch (2 fingers) or ⌘+scroll zooms around the card under the pointer; drag/scroll to pan. Graph regenerates when you stop zooming.";

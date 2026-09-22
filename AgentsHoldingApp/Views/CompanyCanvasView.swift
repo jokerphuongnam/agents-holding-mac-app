@@ -89,7 +89,7 @@ struct CompanyCanvasView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("\(snap.children.count) children · \(snap.teams.count) teams · \(snap.teams.reduce(0) { $0 + $1.staffs.count }) staff")
+                Text("\(snap.children.count) children · \(snap.teams.reduce(0) { $0 + $1.teamCount }) teams · \(snap.teams.reduce(0) { $0 + $1.staffCount }) staff")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -152,17 +152,25 @@ struct TeamBlock: View {
                     .background(.quaternary, in: Capsule())
             }
 
-            if team.staffs.isEmpty {
+            if team.staffs.isEmpty && team.childTeams.isEmpty {
                 Text(L10n.noStaffsInTeam)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
+            } else if !team.staffs.isEmpty {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(team.staffs) { staff in
                         StaffCard(staff: staff, reportCount: reportCounts[staff.name] ?? 0) {
                             onStaff(staff)
                         }
                     }
+                }
+            }
+            if !team.childTeams.isEmpty {
+                Text(L10n.childTeamsHop)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                ForEach(team.childTeams) { child in
+                    TeamBlock(team: child, reportCounts: reportCounts, onStaff: onStaff)
                 }
             }
         }

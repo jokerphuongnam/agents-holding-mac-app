@@ -15,10 +15,37 @@ struct StaffNode: Identifiable, Hashable {
     }
 }
 
-struct TeamNode: Identifiable, Hashable {
-    var id: String { name }
+/// One team folder under `system/staffs`. Child teams live in `teams/` beneath it.
+/// Class so the tree can nest (a struct cannot contain itself).
+final class TeamNode: Identifiable, Hashable {
+    /// Path relative to `system/staffs`, e.g. `rust` or `rust/teams/ruma`.
+    var id: String
     var name: String
     var staffs: [StaffNode]
+    var childTeams: [TeamNode]
+
+    init(id: String, name: String, staffs: [StaffNode], childTeams: [TeamNode] = []) {
+        self.id = id
+        self.name = name
+        self.staffs = staffs
+        self.childTeams = childTeams
+    }
+
+    var staffCount: Int {
+        staffs.count + childTeams.reduce(0) { $0 + $1.staffCount }
+    }
+
+    var teamCount: Int {
+        1 + childTeams.reduce(0) { $0 + $1.teamCount }
+    }
+
+    var allStaffs: [StaffNode] {
+        staffs + childTeams.flatMap(\.allStaffs)
+    }
+
+    static func == (lhs: TeamNode, rhs: TeamNode) -> Bool { lhs.id == rhs.id }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 struct AgentRow: Hashable {

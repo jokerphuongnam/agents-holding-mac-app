@@ -11,7 +11,7 @@ extension StaffDirectory {
     /// Build staffs tree rooted at top dispatcher(s) (`ceo` / `holding-ceo`).
     func buildStaffTree(companyRoot: URL) -> [StaffTreeNode] {
         let agents = loadAgentsTSV(companyRoot: companyRoot)
-        let all = loadTeams(companyRoot: companyRoot).flatMap(\.staffs)
+        let all = loadTeams(companyRoot: companyRoot).flatMap(\.allStaffs)
         guard !all.isEmpty else { return [] }
 
         var byName: [String: StaffNode] = [:]

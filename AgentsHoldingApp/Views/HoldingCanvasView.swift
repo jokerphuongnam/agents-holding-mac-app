@@ -66,8 +66,8 @@ struct HoldingCanvasView: View {
                 .foregroundStyle(.secondary)
             Text(
                 L10n.holdingStats(holding.companies.count,
-                    holding.teams.count,
-                    holding.teams.reduce(0) { $0 + $1.staffs.count }
+                    holding.teams.reduce(0) { $0 + $1.teamCount },
+                    holding.teams.reduce(0) { $0 + $1.staffCount }
                 )
             )
                 .font(.subheadline)

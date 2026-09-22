@@ -5,7 +5,7 @@ struct StaffDirectory {
     /// How many direct reports each staff has (hop subordinates).
     func reportCounts(companyRoot: URL) -> [String: Int] {
         let agents = loadAgentsTSV(companyRoot: companyRoot)
-        let names = loadTeams(companyRoot: companyRoot).flatMap(\.staffs).map(\.name)
+        let names = loadTeams(companyRoot: companyRoot).flatMap(\.allStaffs).map(\.name)
         var counts: [String: Int] = [:]
         for name in names {
             let n = names.filter {
@@ -28,15 +28,34 @@ struct StaffDirectory {
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
                 continue
             }
-            teams.append(TeamNode(name: name, staffs: loadStaffNodes(inTeamDir: url, team: name)))
+            teams.append(loadTeam(name: name, dir: url, rel: name))
         }
         return teams.sorted { $0.name < $1.name }
     }
 
+    /// Staff `*.md` in this folder; child teams only under `teams/<child>/`.
+    private func loadTeam(name: String, dir: URL, rel: String) -> TeamNode {
+        let staffs = loadStaffNodes(inTeamDir: dir, team: rel)
+        var children: [TeamNode] = []
+        let nested = dir.appendingPathComponent("teams")
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: nested.path, isDirectory: &isDir), isDir.boolValue,
+           let childNames = try? FileManager.default.contentsOfDirectory(atPath: nested.path) {
+            for child in childNames where !child.hasPrefix(".") {
+                let childURL = nested.appendingPathComponent(child)
+                var childIsDir: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: childURL.path, isDirectory: &childIsDir),
+                      childIsDir.boolValue else { continue }
+                let childRel = "\(rel)/teams/\(child)"
+                children.append(loadTeam(name: child, dir: childURL, rel: childRel))
+            }
+        }
+        children.sort { $0.name < $1.name }
+        return TeamNode(id: rel, name: name, staffs: staffs, childTeams: children)
+    }
+
     func loadStaffDetail(name: String, team: String, companyRoot: URL) -> StaffDetail? {
-        let staffFile = companyRoot
-            .appendingPathComponent("system/staffs")
-            .appendingPathComponent(team)
+        let staffFile = appendRelative(team, to: companyRoot.appendingPathComponent("system/staffs"))
             .appendingPathComponent("\(name).md")
         guard FileManager.default.fileExists(atPath: staffFile.path),
               let body = try? String(contentsOf: staffFile, encoding: .utf8)
@@ -44,7 +63,7 @@ struct StaffDirectory {
 
         let agents = loadAgentsTSV(companyRoot: companyRoot)
         let row = agents[name]
-        let allNodes = loadTeams(companyRoot: companyRoot).flatMap(\.staffs)
+        let allNodes = loadTeams(companyRoot: companyRoot).flatMap(\.allStaffs)
         let node = allNodes.first { $0.name == name && $0.team == team }
             ?? StaffNode(name: name, team: team, blurb: row?.blurb ?? firstBlurb(body) ?? "")
 
@@ -161,6 +180,12 @@ struct StaffDirectory {
             )
         }
         return out
+    }
+
+    private func appendRelative(_ relative: String, to base: URL) -> URL {
+        relative.split(separator: "/").filter { !$0.isEmpty }.reduce(base) {
+            $0.appendingPathComponent(String($1))
+        }
     }
 
     private func col(_ cols: [String], _ i: Int?) -> String {

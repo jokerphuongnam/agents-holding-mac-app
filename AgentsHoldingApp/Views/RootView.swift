@@ -70,12 +70,8 @@ struct SidebarView: View {
                 }
                 Section(L10n.holdingStaffsSection) {
                     ForEach(holding.teams) { team in
-                        DisclosureGroup(team.name) {
-                            ForEach(team.staffs) { staff in
-                                Button(staff.name) {
-                                    appModel.openStaff(staff, inHolding: true)
-                                }
-                            }
+                        TeamSidebarGroup(team: team) { staff in
+                            appModel.openStaff(staff, inHolding: true)
                         }
                     }
                 }
@@ -94,12 +90,8 @@ struct SidebarView: View {
                         }
                     }
                     ForEach(snap.teams) { team in
-                        DisclosureGroup(team.name) {
-                            ForEach(team.staffs) { staff in
-                                Button(staff.name) {
-                                    appModel.openStaff(staff, inHolding: false)
-                                }
-                            }
+                        TeamSidebarGroup(team: team) { staff in
+                            appModel.openStaff(staff, inHolding: false)
                         }
                     }
                 }
@@ -125,6 +117,23 @@ struct SidebarView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// Sidebar team row, including nested `teams/<child>/`.
+private struct TeamSidebarGroup: View {
+    let team: TeamNode
+    let onStaff: (StaffNode) -> Void
+
+    var body: some View {
+        DisclosureGroup(team.name) {
+            ForEach(team.staffs) { staff in
+                Button(staff.name) { onStaff(staff) }
+            }
+            ForEach(team.childTeams) { child in
+                TeamSidebarGroup(team: child, onStaff: onStaff)
+            }
         }
     }
 }

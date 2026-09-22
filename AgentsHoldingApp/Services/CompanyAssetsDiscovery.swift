@@ -35,8 +35,7 @@ struct CompanyAssetsDiscovery {
         let customs = skillsRoot.appendingPathComponent("customs")
 
         // Primary mirror: customs/<team>/<staffName>/
-        let mirrored = customs
-            .appendingPathComponent(team)
+        let mirrored = appendRelative(team, to: customs)
             .appendingPathComponent(staffName)
         out.append(contentsOf: skillMarkdownFiles(under: mirrored, companyRoot: companyRoot))
 
@@ -73,7 +72,7 @@ struct CompanyAssetsDiscovery {
     ) -> [CodeFileRef] {
         var out: [CodeFileRef] = []
         let customs = companyRoot.appendingPathComponent("system/skills/customs")
-        let mirrored = customs.appendingPathComponent(team).appendingPathComponent(staffName)
+        let mirrored = appendRelative(team, to: customs).appendingPathComponent(staffName)
         out.append(contentsOf: scripts(under: mirrored, companyRoot: companyRoot))
 
         for skill in skillFiles {
@@ -96,6 +95,12 @@ struct CompanyAssetsDiscovery {
     }
 
     // MARK: - Walk helpers (atPath only)
+
+    private func appendRelative(_ relative: String, to base: URL) -> URL {
+        relative.split(separator: "/").filter { !$0.isEmpty }.reduce(base) {
+            $0.appendingPathComponent(String($1))
+        }
+    }
 
     private func directoryNames(at url: URL) -> [String] {
         (try? FileManager.default.contentsOfDirectory(atPath: url.path))?

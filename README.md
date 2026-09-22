@@ -13,15 +13,15 @@ curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-a
 That single command:
 
 1. Downloads **`AgentsHolding-mac.dmg`** from the latest [GitHub Release](https://github.com/jokerphuongnam/agents-holding-mac-app/releases)
-2. Installs the `.app` into **`/Applications`**
+2. Installs the `.app` into **`/Applications`** when that folder is writable, otherwise **`~/Applications`**
 3. Opens the app
 
-No clone, no Xcode, no Homebrew. macOS may ask for an admin password to write `/Applications`.
+No clone, no Xcode, no Homebrew. `curl | bash` cannot prompt for an admin password, so the installer does not use `sudo`.
 
 Optional flags:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --tag v1.0.1
+curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --tag v1.1.0
 curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --dir "$HOME/Applications"
 curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash -s -- --no-open
 ```
@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-a
 
 ```bash
 ./Scripts/package-dmg.sh          # → dist/AgentsHolding-mac.dmg
-gh release create v1.0.1 dist/AgentsHolding-mac.dmg --title "v1.0.1" --latest
+gh release create v1.1.0 dist/AgentsHolding-mac.dmg --title "v1.1.0" --latest
 ```
 
 ### Dev from source

@@ -2,15 +2,21 @@
 # One-line install → /Applications:
 #   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 #
-# Downloads the prebuilt DMG from GitHub Releases and installs the .app into
-# /Applications (prompts for admin if needed) — no clone, no local compile.
+# Downloads the prebuilt DMG from GitHub Releases and installs the .app.
+# Prefers /Applications when writable; otherwise ~/Applications.
+# `curl | bash` cannot prompt for sudo (stdin is the script), so the
+# installer never blocks on an admin password.
 set -euo pipefail
 
-exec </dev/null
+# After bash has the script, drop the pipe so later reads do not eat it.
+# Do this only when stdin is not a TTY (`curl | bash`).
+if [[ ! -t 0 ]]; then
+  exec </dev/null
+fi
 
 REPO="${AGENTS_HOLDING_MAC_REPO:-jokerphuongnam/agents-holding-mac-app}"
 ASSET_NAME="${AGENTS_HOLDING_MAC_DMG:-AgentsHolding-mac.dmg}"
-TAG="${AGENTS_HOLDING_MAC_TAG:-latest}" # latest | v1.0.1
+TAG="${AGENTS_HOLDING_MAC_TAG:-latest}" # latest | v1.1.0
 INSTALL_DIR="${AGENTS_HOLDING_MAC_APP_DIR:-/Applications}"
 OPEN_APP=1
 KEEP_DMG=0
@@ -22,7 +28,7 @@ Install prebuilt Agents Holding macOS app from GitHub Releases into /Application
   curl -fsSL https://raw.githubusercontent.com/jokerphuongnam/agents-holding-mac-app/main/install.sh | bash
 
 Options (bash -s):
-  --tag v1.0.1          Release tag (default: latest)
+  --tag v1.1.0          Release tag (default: latest)
   --asset NAME.dmg      Asset filename (default: AgentsHolding-mac.dmg)
   --dir /Applications   Install directory (default: /Applications)
   --no-open             Do not launch the app after install
@@ -54,6 +60,21 @@ need_cmd curl
 need_cmd hdiutil
 need_cmd ditto
 
+ensure_writable_install_dir() {
+  if mkdir -p "$INSTALL_DIR" 2>/dev/null && [[ -w "$INSTALL_DIR" ]]; then
+    return 0
+  fi
+  local fallback="${HOME}/Applications"
+  if [[ "$INSTALL_DIR" == "$fallback" ]]; then
+    echo "error: cannot write $INSTALL_DIR" >&2
+    exit 1
+  fi
+  echo "[install] $INSTALL_DIR is not writable (no sudo prompt under curl | bash)."
+  echo "[install] using $fallback"
+  INSTALL_DIR="$fallback"
+  mkdir -p "$INSTALL_DIR"
+}
+
 api_url() {
   if [[ "$TAG" == "latest" ]]; then
     echo "https://api.github.com/repos/${REPO}/releases/latest"
@@ -66,7 +87,7 @@ echo "[install] fetching release metadata ($TAG)…"
 META="$(curl -fsSL "$(api_url)")" || {
   echo "error: could not fetch release from GitHub ($REPO $TAG)." >&2
   echo "       Publish a Release with asset $ASSET_NAME first:" >&2
-  echo "         ./Scripts/package-dmg.sh && gh release create v1.0.1 dist/$ASSET_NAME --latest" >&2
+  echo "         ./Scripts/package-dmg.sh && gh release create v1.1.0 dist/$ASSET_NAME --latest" >&2
   exit 1
 }
 
@@ -128,27 +149,16 @@ if [[ -z "$APP_SRC" ]]; then
 fi
 APP_NAME="$(basename "$APP_SRC")"
 
+ensure_writable_install_dir
 DEST_APP="$INSTALL_DIR/$APP_NAME"
 echo "[install] installing → $DEST_APP"
 
-run_priv() {
-  # Use sudo only when the install dir is not writable (typical for /Applications).
-  if [[ -d "$INSTALL_DIR" && -w "$INSTALL_DIR" ]] || mkdir -p "$INSTALL_DIR" 2>/dev/null; then
-    if [[ -w "$INSTALL_DIR" ]]; then
-      "$@"
-      return
-    fi
-  fi
-  echo "[install] admin password required to write $INSTALL_DIR"
-  sudo "$@"
-}
-
-run_priv mkdir -p "$INSTALL_DIR"
-run_priv rm -rf "$DEST_APP"
-run_priv ditto "$APP_SRC" "$DEST_APP"
+mkdir -p "$INSTALL_DIR"
+rm -rf "$DEST_APP"
+ditto "$APP_SRC" "$DEST_APP"
 # Clear quarantine so Gatekeeper does not block first launch of a curl-installed app.
 if command -v xattr >/dev/null 2>&1; then
-  run_priv xattr -cr "$DEST_APP" 2>/dev/null || true
+  xattr -cr "$DEST_APP" 2>/dev/null || true
 fi
 
 hdiutil detach "$MOUNT_POINT" -quiet || true

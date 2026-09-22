@@ -92,5 +92,5 @@ hdiutil create \
 echo
 echo "==> done: $DIST/$DMG_NAME"
 echo "Upload to GitHub Release (tag), e.g.:"
-echo "  gh release create v1.0.1 \"$DIST/$DMG_NAME\" --title \"v1.0.1\" --latest --notes \"Agents Holding macOS\""
+echo "  gh release create v1.1.0 \"$DIST/$DMG_NAME\" --title \"v1.1.0\" --latest --notes \"Agents Holding macOS\""
 echo "install.sh will download the latest Release asset named $DMG_NAME"
