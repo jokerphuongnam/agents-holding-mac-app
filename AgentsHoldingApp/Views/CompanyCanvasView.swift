@@ -1,8 +1,23 @@
 import SwiftUI
 
 /// Inside a company: child companies + teams with staffs nested under each team.
+private enum CompanyRosterTab: String, CaseIterable, Identifiable {
+    case tree
+    case list
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .tree: L10n.staffsTree
+        case .list: L10n.staffsList
+        }
+    }
+}
+
 struct CompanyCanvasView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var rosterTab: CompanyRosterTab = .tree
 
     var body: some View {
         Group {
@@ -12,10 +27,24 @@ struct CompanyCanvasView: View {
                         header(snap)
 
                         childrenSection(snap)
-                        StaffsTreeView(
-                            roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot)
-                        ) { staff in
-                            appModel.openStaff(staff, inHolding: false)
+                        Picker("", selection: $rosterTab) {
+                            ForEach(CompanyRosterTab.allCases) { tab in
+                                Text(tab.title).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 420)
+
+                        switch rosterTab {
+                        case .tree:
+                            StaffsTreeView(
+                                roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
+                                showsHeading: false
+                            ) { staff in
+                                appModel.openStaff(staff, inHolding: false)
+                            }
+                        case .list:
+                            teamsSection(snap)
                         }
                         // Only company-scoped assets here; role skills/scripts live on staff detail.
                         if !snap.skills.isEmpty {
@@ -104,6 +133,23 @@ struct CompanyCanvasView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func teamsSection(_ snap: CompanySnapshot) -> some View {
+        let counts = StaffDirectory().reportCounts(companyRoot: snap.companyRoot)
+        return VStack(alignment: .leading, spacing: 12) {
+            if snap.teams.isEmpty {
+                Text(L10n.noStaffsInTeam)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(snap.teams) { team in
+                    TeamBlock(team: team, reportCounts: counts) { staff in
+                        appModel.openStaff(staff, inHolding: false)
+                    }
+                }
             }
         }
     }

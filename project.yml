@@ -35,8 +35,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.agentsholding.app
         PRODUCT_NAME: AgentsHoldingApp
-        MARKETING_VERSION: "1.1.0"
-        CURRENT_PROJECT_VERSION: "110"
+        MARKETING_VERSION: "1.1.2"
+        CURRENT_PROJECT_VERSION: "112"
         INFOPLIST_KEY_CFBundleDisplayName: Agents Holding
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
@@ -61,8 +61,8 @@ targets:
       path: AgentsHoldingApp/Info.plist
       properties:
         CFBundleDisplayName: Agents Holding
-        CFBundleShortVersionString: "1.1.0"
-        CFBundleVersion: "110"
+        CFBundleShortVersionString: "1.1.2"
+        CFBundleVersion: "112"
         LSMinimumSystemVersion: "14.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true

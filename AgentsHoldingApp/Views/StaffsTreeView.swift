@@ -10,6 +10,7 @@ import SwiftUI
 /// Pan (drag / scroll without ⌘) clears the lock.
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
+    var showsHeading: Bool = true
     let onSelect: (StaffNode) -> Void
 
     private let viewportMaxHeight: CGFloat = 560
@@ -32,16 +33,20 @@ struct StaffsTreeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Label(L10n.staffsTree, systemImage: "person.3")
-                    .font(.headline)
+                if showsHeading {
+                    Label(L10n.staffsTree, systemImage: "person.3")
+                        .font(.headline)
+                }
                 Spacer()
                 if !roots.isEmpty {
                     zoomToolbar
                 }
             }
-            Text(L10n.staffsTreeHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if showsHeading {
+                Text(L10n.staffsTreeHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if roots.isEmpty {
                 Text(L10n.staffsTreeEmpty)
