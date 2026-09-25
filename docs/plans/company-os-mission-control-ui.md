@@ -8,32 +8,32 @@ Inspired by [Paperclip](https://paperclip.ing/) (org canvas / manage a company o
 
 ## Goal
 
-macOS app để **điều khiển holding / company bằng sơ đồ + chat trong context company**, thay vì mở terminal thủ công.
+macOS app to **control holding / company via org diagram + chat in company context**, instead of opening a terminal by hand.
 
-User mở app → **Holding (org canvas)** → click **staff** hoặc **company** → detail / vào company → trong company: sơ đồ + **chat CEO** (cùng worktree) → CEO call BA thì **tự mở panel BA**, xong **trả về CEO**.  
-Ngoài ra có **screen thống kê token riêng** (theo staff / model / worktree / thời gian).
+User opens the app → **Holding (org canvas)** → click **staff** or **company** → detail / enter company → inside company: diagram + **CEO chat** (same worktree) → when CEO calls BA, **auto-open BA panel**, then **return to CEO**.  
+Also a **dedicated token usage screen** (by staff / model / worktree / time).
 
 ## Product shape
 
 | Decision | Choice |
 | --- | --- |
-| Code home | **[`agents-holding-mac-app`](https://github.com/jokerphuongnam/agents-holding-mac-app)** — companion của [`agents-holding`](https://github.com/jokerphuongnam/agents-holding) |
+| Code home | **[`agents-holding-mac-app`](https://github.com/jokerphuongnam/agents-holding-mac-app)** — companion of [`agents-holding`](https://github.com/jokerphuongnam/agents-holding) |
 | Stack | **macOS SwiftUI** (native FS, windowing, polish motion) |
 | Data SoT | Read (later write policies) from **`agents-holding`** path — never vendor staff SoT into the app repo |
-| Entry | App **tự tìm path Holding** (`AGENTS_HOLDING_PATH` / Settings / sibling `../agents-holding`) |
-| Primary UI | **Sơ đồ org kiểu Paperclip** — không lấy list khô làm mặt chính |
-| Chat entry | **Bắt đầu chat luôn trong company** (không bắt đầu từ terminal) |
-| Terminal | Chỉ runtime phía dưới (CLI/API harness); user không lấy terminal làm cửa vào |
-| Usage | **Screen riêng** — bảng thống kê token (không nhét vào org canvas) |
-| Motion | **Polish only** — scale nhỏ → lớn khi mở holding / company / child / staff cho đỡ nhảy trang thô; không phải feature nghiệp vụ |
+| Entry | App **discovers Holding path** (`AGENTS_HOLDING_PATH` / Settings / sibling `../agents-holding`) |
+| Primary UI | **Paperclip-style org diagram** — not a bare list as the main surface |
+| Chat entry | **Always start chat inside a company** (not from the terminal) |
+| Terminal | Runtime under the hood only (CLI/API harness); user does not enter via terminal |
+| Usage | **Dedicated screen** — token stats table (not embedded in the org canvas) |
+| Motion | **Polish only** — small → large scale when opening holding / company / child / staff to soften hard page jumps; not a product feature |
 
 ## Non-goals
 
-- Không thay Desk Garden game UI / plant-water / host-shell product AC  
-- Không clone Paperclip 1:1 (ticket / budget / heartbeat → phase sau nếu cần)  
-- Không sửa `system/staffs/**` khi user chỉ đổi merge map  
-- Không bắt buộc `runtime_router.enabled = true` mặc định (opt-in)  
-- IC không phải user channel (`game-engineer`, …) **không** auto-mở chat với user
+- Do not replace Desk Garden game UI / plant-water / host-shell product AC  
+- Do not clone Paperclip 1:1 (ticket / budget / heartbeat → later phase if needed)  
+- Do not edit `system/staffs/**` when the user only changes the merge map  
+- Do not require `runtime_router.enabled = true` by default (opt-in)  
+- ICs that are not user channels (`game-engineer`, …) **must not** auto-open chat with the user
 
 ---
 
@@ -41,63 +41,63 @@ Ngoài ra có **screen thống kê token riêng** (theo staff / model / worktree
 
 ### 1. Holding home (entry canvas)
 
-Mở Holding = **sơ đồ / inventory companies only** (không liệt kê staff holding trên home).
+Opening Holding = **diagram / inventory of companies only** (do not list holding staffs on home).
 
 | Click | Result |
 | --- | --- |
-| **Company** | **Mở company đó** (child companies + teams + staffs) |
+| **Company** | **Open that company** (child companies + teams + staffs) |
 
-Holding context: path holding + registry companies (`company_registry.py`).
+Holding context: holding path + company registry (`company_registry.py`).
 
-### 2. Company view (sau khi bấm vào một company)
+### 2. Company view (after opening a company)
 
-Trong company hiện:
+Inside a company show:
 
-- **Child companies** (click → mở company con / external SoT)  
+- **Child companies** (click → open child company / external SoT)  
 - **Teams** (`system/staffs/<team>/`)  
-- **Staffs nested under team** (không flat list toàn company)  
-- Click **staff** → staff detail (có field team)  
-- Click **child company** → drill vào company đó  
+- **Staffs nested under team** (not a flat company-wide list)  
+- Click **staff** → staff detail (includes team field)  
+- Click **child company** → drill into that company  
 
 **Company context strip** (header):
 
-| Field | Meaning | SoT gần đúng |
+| Field | Meaning | Approximate SoT |
 | --- | --- | --- |
 | Slug / name | e.g. `desk-garden-company` | folder + `META.toml` |
-| Parent | **Holding** nếu top-level child; **parent company** nếu nested | `parent_slug`, pointer |
-| Folder / `project_root` | Package cwd company làm việc | `META.toml` `project_root` / `company_path` |
-| Plan(s) | Plan files liên quan | `cache/plans/`, repo `docs/plans/` |
-| Worktree(s) | Worktree đang gắn session | `.company-worktrees/`, launch `--worktree-name` |
+| Parent | **Holding** if top-level child; **parent company** if nested | `parent_slug`, pointer |
+| Folder / `project_root` | Package cwd the company works in | `META.toml` `project_root` / `company_path` |
+| Plan(s) | Related plan files | `cache/plans/`, repo `docs/plans/` |
+| Worktree(s) | Worktrees bound to sessions | `.company-worktrees/`, launch `--worktree-name` |
 
-### 3. Staff detail (holding hoặc company)
+### 3. Staff detail (holding or company)
 
-**Nguyên tắc:** một staff **không** đọc / làm cả project. Họ chỉ được cấp:
+**Principle:** a staff **does not** read / work the whole project. They only get:
 
-1. **Skills / nhiệm vụ hẹp** — ví dụ `devops` → CLI/pack/mpm; `git` → git gate; eng → đúng skill tree  
-2. **Path fence** — files/folders được phép (team RW + SCOPE / staff md)  
-3. **Org** — lead (cấp trên) + reports (cấp dưới họ quản)
+1. **Narrow skills / duties** — e.g. `devops` → CLI/pack/mpm; `git` → git gate; eng → matching skill tree  
+2. **Path fence** — allowed files/folders (team RW + SCOPE / staff md)  
+3. **Org** — lead (superior) + reports (people they manage)
 
-UI staff detail phải làm rõ hai lớp giới hạn đó (task/skill + filesystem), không tạo cảm giác “full repo access”.
+Staff detail UI must make those two limit layers clear (task/skill + filesystem), and must not imply “full repo access”.
 
 | Section | Content |
 | --- | --- |
-| Identity | name, mô tả/blurb, tier, permission / capability |
-| Org | lead (parent staff), direct reports (có hoặc không) |
-| Skills | list skill id — **bấm đọc** `SKILL.md` (đây là biên nhiệm vụ) |
-| Access scope | files/folders được phép / must-not (SCOPE + staff fence) |
-| Worktrees | worktree đã/đang gắn (P0 có thể mỏng; P3 ledger đủ) |
-| Runtime profiles | bảng grok / codex / claude / **merge** (dưới) |
+| Identity | name, description/blurb, tier, permission / capability |
+| Org | lead (parent staff), direct reports (may be empty) |
+| Skills | skill id list — **tap to read** `SKILL.md` (this is the duty boundary) |
+| Access scope | allowed / must-not files/folders (SCOPE + staff fence) |
+| Worktrees | attached / active worktrees (P0 may be thin; P3 ledger complete) |
+| Runtime profiles | grok / codex / claude / **merge** table (below) |
 
 ### 4. Runtime profiles — invariant
 
-**Staff SoT không đổi.** Chỉ cách **chạy** staff đổi theo launch mode.
+**Staff SoT does not change.** Only **how** the staff runs changes by launch mode.
 
 | Launch | UI shows | Behavior |
 | --- | --- | --- |
-| **grok** / **codex** / **claude** | model + effort từ harness đó × tier staff | Session **full** vendor đó |
-| **merge** | **resolved**: runtime (CLI) + model + effort | Overlay `runtime_router.toml`; model/effort lấy từ harness của runtime được map. Staff card/skills/tier không đổi |
+| **grok** / **codex** / **claude** | model + effort from that harness × staff tier | Session is **full** that vendor |
+| **merge** | **resolved**: runtime (CLI) + model + effort | Overlay `runtime_router.toml`; model/effort come from the mapped runtime harness. Staff card/skills/tier unchanged |
 
-Ví dụ merge: CEO → grok; `ba-user` → claude. CEO hop BA = **CLI bridge**, không spawn BA như agent trong session grok.
+Merge example: CEO → grok; `ba-user` → claude. CEO hop BA = **CLI bridge**, does not spawn BA as an agent inside the grok session.
 
 Script SoT (holding):
 
@@ -106,77 +106,77 @@ python3 …/runtime_router.py resolve --role ba-user --session grok
 python3 …/runtime_router.py hop --from ceo --to ba-user --session grok --goal '…'
 ```
 
-### 5. Session / chat (bắt đầu trong company)
+### 5. Session / chat (starts inside company)
 
-Chat **không** bắt đầu ngoài company hay từ terminal user-facing.
+Chat **does not** start outside a company or from a user-facing terminal.
 
-**Trong company view:**
+**In company view:**
 
-1. Chọn hoặc tạo **worktree** (nếu chưa có).  
-2. **Chat mặc định = `ceo`** của worktree đó (user channel).  
-3. Harness: grok | codex | claude | merge (merge dùng router default / map).  
+1. Pick or create a **worktree** (if none yet).  
+2. **Default chat = `ceo`** for that worktree (user channel).  
+3. Harness: grok | codex | claude | merge (merge uses router default / map).  
 
 **CEO call BA (user-facing handoff):**
 
 ```text
-[Company] Chat CEO (worktree W)
-    → CEO call ba-user
-[Company] Tự mở panel/session BA-user (cùng W)
+[Company] CEO chat (worktree W)
+    → CEO calls ba-user
+[Company] Auto-open BA-user panel/session (same W)
     → User ↔ ba-user
     → BA done / handback
-[Company] Đóng hoặc archive panel BA → focus lại chat CEO (cùng W)
+[Company] Close or archive BA panel → focus CEO chat again (same W)
 ```
 
-Quy tắc:
+Rules:
 
-- Cùng **worktree name** xuyên suốt — không tạo worktree mới chỉ vì BA.  
-- Chỉ **`ba-user`** (và nếu có policy: `backend-ba`) được auto-mở user chat surface.  
-- Lead hop IC khác = handoff nội bộ, **không** mở chat user.  
-- Merge: panel BA có thể khác CLI/model; badge runtime trên panel.  
-- Optional: brief BA dán lại thread CEO khi handback.
+- Same **worktree name** end-to-end — do not create a new worktree only for BA.  
+- Only **`ba-user`** (and if policy allows: `backend-ba`) auto-opens a user chat surface.  
+- Lead hop to other ICs = internal handoff, **does not** open user chat.  
+- Merge: BA panel may use a different CLI/model; show runtime badge on the panel.  
+- Optional: paste BA brief back into the CEO thread on handback.
 
-“Terminal” = session panel (chat + log), mô phỏng CLI phía dưới.
+“Terminal” = session panel (chat + log), with CLI simulated underneath.
 
-### 6. Usage / token stats (**screen riêng**)
+### 6. Usage / token stats (**dedicated screen**)
 
-Một màn **Usage** độc lập (nav riêng), không thay org canvas.
+A standalone **Usage** screen (own nav), not a replacement for the org canvas.
 
-**Mục tiêu:** biết staff / model / worktree đã đốt bao nhiêu token — kể cả khi chạy qua **merge**.
+**Goal:** know how many tokens staff / model / worktree burned — including when run through **merge**.
 
 #### Attribution rules
 
 | Dimension | Rule |
 | --- | --- |
-| **Staff** | Token gắn **staff role** đang chạy (`ceo`, `ba-user`, …), không gắn “session owner” trừ khi chính staff đó |
-| **Model** | Gắn **model thật đã gọi** (vd. `grok-4.6`, `sonnet`). Launch = `merge` nhưng router chọn grok cho staff → **tính vào bucket model grok** (và có thể có cột secondary `launch_mode=merge`) |
-| **Runtime / vendor** | grok / claude / codex (CLI đã invoke) |
-| **Worktree** | Theo worktree name / path của session |
-| **Company / holding** | Scope filter: holding-wide vs một company |
+| **Staff** | Tokens attach to the **staff role** that ran (`ceo`, `ba-user`, …), not to “session owner” unless that staff is the one |
+| **Model** | Attach to the **actual model invoked** (e.g. `grok-4.6`, `sonnet`). Launch = `merge` but router chose grok for the staff → **count in the grok model bucket** (optional secondary column `launch_mode=merge`) |
+| **Runtime / vendor** | grok / claude / codex (CLI that was invoked) |
+| **Worktree** | By session worktree name / path |
+| **Company / holding** | Scope filter: holding-wide vs one company |
 
-#### Time & slice filters (bảng + chart)
+#### Time & slice filters (table + chart)
 
-- Toàn thời gian  
-- Theo **ngày** / **tháng** (và range custom)  
-- Theo **một worktree** / tất cả worktree  
-- Theo **một staff** / tất cả staff  
-- Theo **model** (và/hoặc vendor)
+- All time  
+- By **day** / **month** (and custom range)  
+- By **one worktree** / all worktrees  
+- By **one staff** / all staff  
+- By **model** (and/or vendor)
 
-#### Views trên screen
+#### Views on the screen
 
-1. **Summary cards** — total tokens (holding hoặc company đang filter)  
-2. **By staff** — tổng token mỗi staff (all-time / period)  
-3. **By model** — grok vs claude vs … (merge không tách bucket riêng nếu model đã resolve; optional breakdown `direct` vs `via_merge`)  
-4. **By worktree** — token per worktree; drill-down staff×model trong worktree  
-5. **Staff drill-down** — từ staff detail có link “Usage” → prefilter staff đó  
+1. **Summary cards** — total tokens (holding or filtered company)  
+2. **By staff** — total tokens per staff (all-time / period)  
+3. **By model** — grok vs claude vs … (merge is not its own bucket once model is resolved; optional `direct` vs `via_merge` breakdown)  
+4. **By worktree** — tokens per worktree; drill-down staff×model inside a worktree  
+5. **Staff drill-down** — from staff detail, “Usage” link → prefilter that staff  
 
-#### Metering SoT (cần có để UI không bịa số)
+#### Metering SoT (required so the UI does not invent numbers)
 
-Hiện company OS **chưa** có ledger token chuẩn đủ các chiều trên → phase Usage cần:
+Company OS **does not yet** have a full token ledger across the dimensions above → the Usage phase needs:
 
-- Collector khi session/hop/`--execute` (và chat UI) ghi event:  
+- Collector on session/hop/`--execute` (and chat UI) writing events:  
   `timestamp, company, worktree, staff, launch_mode, runtime, model, effort, input_tokens, output_tokens, total_tokens, source`  
-- Store: SQLite/JSONL dưới holding hoặc company `cache/usage/` (chốt lúc implement)  
-- UI **chỉ đọc** ledger; thiếu meter → empty state rõ (“chưa có usage events”)
+- Store: SQLite/JSONL under holding or company `cache/usage/` (lock at implement time)  
+- UI **only reads** the ledger; missing meter → clear empty state (“no usage events yet”)
 
 ---
 
@@ -184,27 +184,27 @@ Hiện company OS **chưa** có ledger token chuẩn đủ các chiều trên �
 
 1. **Holding org canvas** — staffs + companies (Paperclip-style)  
 2. **Company org canvas** — staffs (+ nested companies) + context strip  
-3. **Staff detail** — shared drawer từ holding hoặc company  
-4. **Company chat dock** — CEO (default); BA panel khi CEO call BA  
+3. **Staff detail** — shared drawer from holding or company  
+4. **Company chat dock** — CEO (default); BA panel when CEO calls BA  
 5. **Merge policy / hop preview** (optional tab) — role → runtime; native vs cli  
-6. **Usage (token stats)** — **screen riêng**: bảng/filter theo staff, model, worktree, ngày/tháng/all-time  
+6. **Usage (token stats)** — **dedicated screen**: table/filters by staff, model, worktree, day/month/all-time  
 
-List/table cho Usage là đúng chỗ; org vẫn lấy **sơ đồ** làm mặt chính.
+List/table is right for Usage; org still uses the **diagram** as the primary surface.
 
 ### Motion / transitions (scale-up) — polish
 
-Chỉ để navigation **đỡ thô cứng**. Không thêm nghiệp vụ, không block ship nếu chưa có (P0 vẫn nhận nếu click đúng mở đúng màn).
+Only so navigation **feels less abrupt**. No new product behavior; do not block ship if missing (P0 still passes when clicks open the right screen).
 
-Gợi ý (shared-element / hero zoom):
+Suggestion (shared-element / hero zoom):
 
-| Gesture | Motion gợi ý |
+| Gesture | Suggested motion |
 | --- | --- |
-| Click **Holding** / **company** / **child company** | Node/card **scale nhỏ → lớn**, fill viewport |
-| Click **staff** | Panel/node staff **phóng to** → detail |
-| Back / đóng | **Scale ngược** về vị trí node trên canvas |
-| Usage | Fade/slide nhẹ cũng được |
+| Click **Holding** / **company** / **child company** | Node/card **scale small → large**, fill viewport |
+| Click **staff** | Staff panel/node **zoom up** → detail |
+| Back / close | **Reverse scale** to the node position on the canvas |
+| Usage | Light fade/slide is fine |
 
-Reduced-motion → tắt scale, fallback fade/instant.
+Reduced-motion → disable scale; fall back to fade/instant.
 
 ---
 
@@ -212,68 +212,68 @@ Reduced-motion → tắt scale, fallback fade/instant.
 
 | Phase | Deliverable |
 | --- | --- |
-| **P0** | Repo UI + discover Holding; **org canvas** holding (staff + company nodes); click → staff detail / open company; company canvas read-only + context strip. **Add company wizard** (catalog-only): folder → select **template staffs** → select **library skills** → `create-company.sh` + `apply_company_roster.py`. **Không** invent staff/skill trống trong app (thêm SoT vào holding templates trước). Scale-up = polish. |
-| **P1** | **Chat trong company** với CEO (worktree-bound); harness picker; wire launch/session dưới hood |
-| **P1.5** | **CEO → BA channel switch**: auto mở BA panel cùng worktree; handback đóng BA → CEO |
+| **P0** | UI repo + discover Holding; **org canvas** for holding (staff + company nodes); click → staff detail / open company; company canvas read-only + context strip. **Add company wizard** (catalog-only): folder → select **template staffs** → select **library skills** → `create-company.sh` + `apply_company_roster.py`. **Do not** invent empty staff/skill in the app (add SoT to holding templates first). Scale-up = polish. |
+| **P1** | **Chat inside company** with CEO (worktree-bound); harness picker; wire launch/session under the hood |
+| **P1.5** | **CEO → BA channel switch**: auto-open BA panel on same worktree; handback closes BA → CEO |
 | **P2** | Runtime profile table + merge resolve/hop preview; optional edit `[[roles]]` / enable + regen adapters |
-| **P3** | Worktree/plan live binding + handoff/worktree history per staff; access scope SoT sạch hơn |
+| **P3** | Worktree/plan live binding + handoff/worktree history per staff; cleaner access-scope SoT |
 | **P4** | **Usage ledger + Usage screen** (filters staff/model/worktree/day/month/all-time; merge→model attribution) |
-| **P5** | Paperclip extras (tickets, budgets-as-caps, heartbeats) nếu vẫn cần — budgets có thể đọc cùng ledger Usage |
+| **P5** | Paperclip extras (tickets, budgets-as-caps, heartbeats) if still needed — budgets may read the same Usage ledger |
 
 ## Acceptance
 
 ### P0 — canvas
 
-1. Mở app → Holding canvas (không bắt user mở terminal trước).  
-2. Holding hiện **cả staff lẫn company** dạng sơ đồ (không chỉ list).  
-3. Click staff → detail; click company → vào company canvas.  
-4. Company hiện parent đúng (holding vs parent company) + `project_root`.  
-5. Company canvas: click staff → detail; click child company (nếu có) → mở tiếp.  
-5b. *(Polish)* Scale nhỏ→lớn / back scale-down cho holding·company·staff — khuyến khích, không fail P0 nếu thiếu.  
+1. Open app → Holding canvas (user is not forced to open a terminal first).  
+2. Holding shows **both staff and company** as a diagram (not list-only).  
+3. Click staff → detail; click company → enter company canvas.  
+4. Company shows correct parent (holding vs parent company) + `project_root`.  
+5. Company canvas: click staff → detail; click child company (if any) → open next.  
+5b. *(Polish)* Small→large scale / back scale-down for holding·company·staff — encouraged, does not fail P0 if missing.  
 
 ### P1 — chat in company
 
-6. Trong company: chat được với **CEO** trên một worktree.  
-7. Không yêu cầu user tự chạy `launch.sh` ngoài UI.  
+6. Inside company: can chat with **CEO** on a worktree.  
+7. User is not required to run `launch.sh` outside the UI.  
 
 ### P1.5 — BA handoff UX
 
-8. Khi CEO call BA: UI **tự mở** panel `ba-user` cùng worktree.  
-9. Khi BA xong: panel BA đóng/ẩn → **quay lại CEO**.  
-10. IC non-user **không** mở chat user.  
+8. When CEO calls BA: UI **auto-opens** `ba-user` panel on the same worktree.  
+9. When BA finishes: BA panel closes/hides → **return to CEO**.  
+10. Non-user IC **does not** open user chat.  
 
 ### Runtime invariant (P2+)
 
-11. Cột/panel merge = overlay resolve; **không** imply staff file đổi.  
-12. Preview hop `ceo@grok → ba-user@claude` = mode `cli`.  
+11. Merge column/panel = overlay resolve; **does not** imply the staff file changed.  
+12. Hop preview `ceo@grok → ba-user@claude` = mode `cli`.  
 
 ### Usage (P4)
 
-13. Có **screen Usage riêng** (nav), không chỉ widget trên canvas.  
-14. Filter được: all-time / day / month / range; theo staff; theo worktree; theo model.  
-15. Token qua **merge** nhưng model resolve = grok → **cộng vào thống kê model grok** (và vẫn biết `launch_mode=merge` nếu cần).  
-16. Empty state khi chưa có ledger events.  
+13. There is a **dedicated Usage screen** (nav), not only a canvas widget.  
+14. Filters work: all-time / day / month / range; by staff; by worktree; by model.  
+15. Tokens via **merge** but model resolves to grok → **count toward grok model stats** (and still know `launch_mode=merge` if needed).  
+16. Empty state when there are no ledger events yet.  
 
 ## Open questions
 
-- Stack repo UI (web local / Electron / IDE panel)?  
+- UI repo stack (local web / Electron / IDE panel)?  
 - Discover Holding: single config path vs multi-holding switcher?  
-- Edit merge trong UI vs deep-link toml ở P2?  
-- Access scope SoT canonical (GRANTS vs `scope_guard`)?  
-- `backend-ba` có cùng auto-panel như `ba-user` không?  
-- Usage store: holding-global vs per-company files? Lấy token từ vendor CLI/API nào làm nguồn sự thật?  
-- Scale-up: full-screen route vs overlay layer trên cùng canvas? Duration / easing chuẩn design-system?
+- Edit merge in UI vs deep-link toml at P2?  
+- Canonical access-scope SoT (GRANTS vs `scope_guard`)?  
+- Does `backend-ba` get the same auto-panel as `ba-user`?  
+- Usage store: holding-global vs per-company files? Which vendor CLI/API is the source of truth for tokens?  
+- Scale-up: full-screen route vs overlay layer on the same canvas? Duration / easing from the design system?
 
 ## References
 
 - Paperclip: https://paperclip.ing/  
 - Holding hop script: `runtime_router.py` (`resolve`, `hop`) — agents-holding  
 - Company launch: `launch.sh <grok|claude|codex|merge> [--worktree-name] [--agent ceo|ba-user]`  
-- User channels: `ceo`, `ba-user` (cùng worktree)  
+- User channels: `ceo`, `ba-user` (same worktree)  
 
 ## Next
 
-1. PO lock plan này (hoặc design-lead wireframe P0 canvas).  
+1. PO lock this plan (or design-lead wireframe P0 canvas).  
 2. **P0 in this repo:** real org diagram layout (not only grid cards); parse `META.toml` / `COMPANY_POINTER` for `project_root`; open company staffs canvas.  
-3. Desk Garden host-shell / product plans **track riêng** — không gộp vào plan này.  
+3. Desk Garden host-shell / product plans **track separately** — do not fold into this plan.  
 4. Optional: add GitHub remote when ready (`gh repo create`).  

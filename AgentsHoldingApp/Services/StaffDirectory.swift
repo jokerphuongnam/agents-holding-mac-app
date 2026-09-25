@@ -67,7 +67,7 @@ struct StaffDirectory {
         let node = allNodes.first { $0.name == name && $0.team == team }
             ?? StaffNode(name: name, team: team, blurb: row?.blurb ?? firstBlurb(body) ?? "")
 
-        // Cấp trên = who may Assign/hop to command this staff.
+        // Superior = who may Assign/hop to command this staff.
         // agents.tsv `lead` when set; else company `ceo` / holding `holding-ceo` (tops have none).
         let lead = resolveLead(name: name, row: row, agents: agents, companyRoot: companyRoot)
         let reports = allNodes.filter { staff in

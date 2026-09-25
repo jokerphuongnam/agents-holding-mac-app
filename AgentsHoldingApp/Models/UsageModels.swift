@@ -92,8 +92,8 @@ enum UsageBucket: String, CaseIterable, Identifiable {
 
 /// Chart presentation — switches with filters; only suitable kinds are offered.
 enum UsageChartKind: String, CaseIterable, Identifiable {
-    case donut // tròn
-    case pie // quạt
+    case donut
+    case pie
     case bar
     case line
     case table
