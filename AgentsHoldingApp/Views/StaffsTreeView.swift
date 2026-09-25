@@ -48,6 +48,7 @@ struct StaffsTreeView: View {
                     zoomToolbar
                     if let windowID {
                         Button {
+                            StaffsTreeWindowGate.markIntentionalOpen()
                             openWindow(id: "staffs-tree", value: windowID)
                         } label: {
                             Label(L10n.staffsTreeOpenWindow, systemImage: "macwindow")

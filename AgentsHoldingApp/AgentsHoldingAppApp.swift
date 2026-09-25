@@ -18,6 +18,8 @@ struct AgentsHoldingAppApp: App {
             CommandGroup(replacing: .newItem) {}
         }
 
+        // May be session-restored on launch — StaffsTreeWindowView dismisses unless
+        // StaffsTreeWindowGate was marked by the toolbar button.
         WindowGroup(
             L10n.staffsTreeWindowTitle,
             id: "staffs-tree",
@@ -30,10 +32,7 @@ struct AgentsHoldingAppApp: App {
                     .environment(\.locale, languageStore.locale)
                     .id(languageStore.revision)
             } else {
-                ContentUnavailableView(
-                    L10n.staffsTreeEmpty,
-                    systemImage: "person.3"
-                )
+                StaffsTreeWindowDiscardView()
             }
         }
         .defaultSize(width: 1100, height: 860)
