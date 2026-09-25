@@ -19,7 +19,7 @@ struct AgentsHoldingAppApp: App {
         }
 
         WindowGroup(
-            L10nLookup("staffs_tree_window_title", "Localizable", "Staffs tree"),
+            L10n.staffsTreeWindowTitle,
             id: "staffs-tree",
             for: StaffsTreeWindowID.self
         ) { $windowID in
@@ -31,7 +31,7 @@ struct AgentsHoldingAppApp: App {
                     .id(languageStore.revision)
             } else {
                 ContentUnavailableView(
-                    L10nLookup("staffs_tree_empty", "Localizable", "No staffs to show in the org tree"),
+                    L10n.staffsTreeEmpty,
                     systemImage: "person.3"
                 )
             }
