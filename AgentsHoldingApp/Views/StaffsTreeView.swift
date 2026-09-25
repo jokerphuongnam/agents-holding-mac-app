@@ -47,11 +47,10 @@ struct StaffsTreeView: View {
                         Button {
                             openWindow(id: "staffs-tree", value: windowID)
                         } label: {
-                            Label(L10nLookup("staffs_tree_open_window", "Localizable", "Open in new window"),
-                                  systemImage: "macwindow")
+                            Label(L10n.staffsTreeOpenWindow, systemImage: "macwindow")
                         }
                         .buttonStyle(.borderless)
-                        .help(L10nLookup("staffs_tree_open_window_help", "Localizable", "Open the staffs org graph in a dedicated window"))
+                        .help(L10n.staffsTreeOpenWindowHelp)
                         .controlSize(.small)
                     }
                 }
