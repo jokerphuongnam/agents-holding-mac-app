@@ -75,6 +75,7 @@ struct CompanyCanvasView: View {
                     .padding(24)
                 }
                 .navigationTitle(snap.node.displayName)
+                .onAppear { appModel.refreshOpenCompany() }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(appModel.companyStack.count > 1 ? L10n.parent : L10n.holding) {
@@ -118,7 +119,8 @@ struct CompanyCanvasView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("\(snap.children.count) children · \(snap.teams.reduce(0) { $0 + $1.teamCount }) teams · \(snap.teams.reduce(0) { $0 + $1.staffCount }) staff")
+                let liveTeams = StaffDirectory().loadTeams(companyRoot: snap.companyRoot)
+                Text("\(snap.children.count) children · \(liveTeams.reduce(0) { $0 + $1.teamCount }) teams · \(liveTeams.reduce(0) { $0 + $1.staffCount }) staff")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -138,14 +140,18 @@ struct CompanyCanvasView: View {
     }
 
     private func teamsSection(_ snap: CompanySnapshot) -> some View {
-        let counts = StaffDirectory().reportCounts(companyRoot: snap.companyRoot)
+        // Load teams live from disk (same as Tree) so nested large teams
+        // like core/teams/cpp-llvm appear without re-opening the company.
+        let directory = StaffDirectory()
+        let teams = directory.loadTeams(companyRoot: snap.companyRoot)
+        let counts = directory.reportCounts(companyRoot: snap.companyRoot)
         return VStack(alignment: .leading, spacing: 12) {
-            if snap.teams.isEmpty {
+            if teams.isEmpty {
                 Text(L10n.noStaffsInTeam)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(snap.teams) { team in
+                ForEach(teams) { team in
                     TeamBlock(team: team, reportCounts: counts) { staff in
                         appModel.openStaff(staff, inHolding: false)
                     }

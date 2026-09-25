@@ -71,6 +71,12 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Re-read the open company from disk (staffs / agents.tsv / nested teams).
+    func refreshOpenCompany() {
+        guard let node = openCompany?.node ?? companyStack.last else { return }
+        openCompanyNode(node)
+    }
+
     func openStaff(_ staff: StaffNode, inHolding: Bool = false) {
         let root: URL?
         if inHolding {
