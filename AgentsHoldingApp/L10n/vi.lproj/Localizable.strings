@@ -63,6 +63,7 @@
 "staffs_tree_open_window" = "Mở cửa sổ mới";
 "staffs_tree_open_window_help" = "Mở đồ thị tổ chức staffs trong cửa sổ riêng";
 "staffs_tree_window_title" = "Staffs tree";
+"staffs_tree_recenter" = "Căn lại graph";
 "company_scripts" = "Scripts company (install)";
 "company_scripts_empty" = "Không có script install cấp company";
 "company_skills" = "Skills company";

@@ -23,7 +23,10 @@ struct StaffsTreeView: View {
 
     private var focusStaffId: String? {
         let ids = roots.map(\.staff.id)
-        if let ceo = ids.first(where: { $0 == "holding-ceo" || $0 == "ceo" }) {
+        if let ceo = ids.first(where: {
+            $0 == "ceo" || $0 == "holding-ceo"
+                || $0.hasSuffix("/ceo") || $0.hasSuffix("/holding-ceo")
+        }) {
             return ceo
         }
         return roots.first?.staff.id
@@ -143,6 +146,15 @@ struct StaffsTreeView: View {
             Button(L10n.staffsTreeZoomReset) { zoomState.resetTowardFocal() }
                 .buttonStyle(.borderless)
                 .disabled(abs(zoomState.displayZoom - 1) < 0.01 && abs(zoomState.live.rubber - 1) < 0.01)
+
+            Button {
+                zoomState.resetViewToOrigin()
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.staffsTreeRecenter)
+            .accessibilityLabel(L10n.staffsTreeRecenter)
         }
         .controlSize(.small)
     }
@@ -285,6 +297,32 @@ private final class OrgGraphZoomState: ObservableObject {
         scheduleBake(delay: buttonBakeDelay)
     }
 
+    /// Clear pan/zoom drift (blank viewport after heavy trackpad flings).
+    func resetViewToOrigin() {
+        bakeWork?.cancel()
+        clearLock()
+        isPinching = false
+        isPanning = false
+        isLiveZooming = false
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            layoutZoom = 1.0
+            live = LiveZoomTransform()
+        }
+        // Re-center on CEO / first root after the next frame reports card frames.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if let id = self.cardFrames.keys.first(where: { $0 == "holding-ceo" || $0.hasSuffix("/ceo") || $0 == "ceo" })
+                ?? self.cardFrames.keys.first,
+               let frame = self.cardFrames[id],
+               self.viewportSize.width > 1 {
+                self.centerContentPoint(CGPoint(x: frame.midX, y: frame.midY), in: self.viewportSize)
+            }
+            self.clampLiveOffset()
+        }
+    }
+
     private func nudgeRubber(factor: CGFloat) {
         bakeWork?.cancel()
         isLiveZooming = true
@@ -354,10 +392,12 @@ private final class OrgGraphZoomState: ObservableObject {
             height: panDragStart.height + translation.height
         )
         live = next
+        clampLiveOffset()
     }
 
     func panDragEnded() {
         isPanning = false
+        clampLiveOffset()
         panDragStart = live.offset
     }
 
@@ -370,6 +410,7 @@ private final class OrgGraphZoomState: ObservableObject {
             height: live.offset.height + deltaY
         )
         live = next
+        clampLiveOffset()
     }
 
     func applyScrollZoom(step: CGFloat) {
@@ -403,11 +444,16 @@ private final class OrgGraphZoomState: ObservableObject {
             live = transform
         }
         lockedFocal = focal
+        clampLiveOffset()
     }
 
     /// After layout regenerate, glue the locked card back under the focal point.
     private func repinFromCardFrames(focal: CGPoint) {
-        guard let lock, let frame = cardFrames[lock.id] else { return }
+        guard let lock, let frame = cardFrames[lock.id] else {
+            // Frames not ready / lock lost after bake — keep something on-screen.
+            clampLiveOffset()
+            return
+        }
         let contentPt = CGPoint(
             x: frame.minX + lock.rel.x * frame.width,
             y: frame.minY + lock.rel.y * frame.height
@@ -419,6 +465,45 @@ private final class OrgGraphZoomState: ObservableObject {
         )
         live = transform
         lockedFocal = focal
+        clampLiveOffset()
+    }
+
+    /// Keep at least a margin of the graph inside the clipped viewport.
+    /// Unbounded trackpad pan/momentum otherwise flings content off-screen → blank/white.
+    private func clampLiveOffset() {
+        guard viewportSize.width > 8, viewportSize.height > 8 else { return }
+        let r = max(live.rubber, 0.0001)
+        let contentBounds: CGRect
+        if !cardFrames.isEmpty {
+            contentBounds = cardFrames.values.reduce(CGRect.null) { $0.union($1) }
+        } else {
+            // Before first preference pass — keep origin near top-leading.
+            contentBounds = CGRect(x: 0, y: 0, width: max(320, viewportSize.width), height: max(240, viewportSize.height))
+        }
+        guard !contentBounds.isNull, contentBounds.width.isFinite, contentBounds.height.isFinite else { return }
+
+        let margin: CGFloat = 96
+        let vw = viewportSize.width
+        let vh = viewportSize.height
+        var ox = live.offset.width
+        var oy = live.offset.height
+
+        let minX = contentBounds.minX * r + ox
+        let maxX = contentBounds.maxX * r + ox
+        let minY = contentBounds.minY * r + oy
+        let maxY = contentBounds.maxY * r + oy
+
+        // If content is entirely left of the visible strip, shift right; etc.
+        if maxX < margin { ox += margin - maxX }
+        if minX > vw - margin { ox -= minX - (vw - margin) }
+        if maxY < margin { oy += margin - maxY }
+        if minY > vh - margin { oy -= minY - (vh - margin) }
+
+        if abs(ox - live.offset.width) > 0.05 || abs(oy - live.offset.height) > 0.05 {
+            var next = live
+            next.offset = CGSize(width: ox, height: oy)
+            live = next
+        }
     }
 
     func repinLockedCardIfNeeded() {
@@ -546,9 +631,17 @@ private final class OrgGraphZoomState: ObservableObject {
                 return nil
             }
 
+            // Ignore inertia after fingers lift — momentum flings the graph off-screen (blank).
+            if !event.momentumPhase.isEmpty {
+                return nil
+            }
+
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let dx = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : event.scrollingDeltaX * 3
             let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 3
+
+            // Drop zero / NaN ticks.
+            guard dx.isFinite, dy.isFinite, abs(dx) + abs(dy) > 0.01 else { return nil }
 
             if flags.contains(.command), !flags.contains(.control) {
                 let step = event.hasPreciseScrollingDeltas ? dy * 0.004 : dy * 0.06

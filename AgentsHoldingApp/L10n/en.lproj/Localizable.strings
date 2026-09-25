@@ -63,6 +63,7 @@
 "staffs_tree_open_window" = "Open in new window";
 "staffs_tree_open_window_help" = "Open the staffs org graph in a dedicated window";
 "staffs_tree_window_title" = "Staffs tree";
+"staffs_tree_recenter" = "Recenter graph";
 "company_scripts" = "Company scripts (install)";
 "company_scripts_empty" = "No company-wide install scripts";
 "company_skills" = "Company skills";
