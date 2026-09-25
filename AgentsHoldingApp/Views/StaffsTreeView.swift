@@ -11,10 +11,13 @@ import SwiftUI
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     var showsHeading: Bool = true
+    /// Cap for the embedded graph. `nil` fills the parent (detached window).
+    var viewportMaxHeight: CGFloat? = 900
+    /// When set, shows a control that opens this graph in a dedicated window.
+    var windowID: StaffsTreeWindowID? = nil
     let onSelect: (StaffNode) -> Void
 
-    private let viewportMaxHeight: CGFloat = 560
-
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var zoomState = OrgGraphZoomState()
     @State private var didCenterCEO = false
 
@@ -40,6 +43,17 @@ struct StaffsTreeView: View {
                 Spacer()
                 if !roots.isEmpty {
                     zoomToolbar
+                    if let windowID {
+                        Button {
+                            openWindow(id: "staffs-tree", value: windowID)
+                        } label: {
+                            Label(L10nLookup("staffs_tree_open_window", "Localizable", "Open in new window"),
+                                  systemImage: "macwindow")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10nLookup("staffs_tree_open_window_help", "Localizable", "Open the staffs org graph in a dedicated window"))
+                        .controlSize(.small)
+                    }
                 }
             }
             if showsHeading {
@@ -93,7 +107,12 @@ struct StaffsTreeView: View {
                 centerCEOIfNeeded(viewport: viewportGeo.size)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: viewportMaxHeight)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: viewportMaxHeight == nil ? 480 : 360,
+            maxHeight: viewportMaxHeight
+        )
+        .frame(maxHeight: viewportMaxHeight == nil ? .infinity : nil)
         .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }

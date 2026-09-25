@@ -19,7 +19,13 @@ struct HoldingCanvasView: View {
                         header(holding)
                         companiesSection(holding)
                         StaffsTreeView(
-                            roots: StaffDirectory().buildStaffTree(companyRoot: holding.packageRoot)
+                            roots: StaffDirectory().buildStaffTree(companyRoot: holding.packageRoot),
+                            viewportMaxHeight: 900,
+                            windowID: StaffsTreeWindowID(
+                                companyRootPath: holding.packageRoot.path,
+                                title: "\(holding.name) · \(L10n.staffsTree)",
+                                inHolding: true
+                            )
                         ) { staff in
                             appModel.openStaff(staff, inHolding: true)
                         }

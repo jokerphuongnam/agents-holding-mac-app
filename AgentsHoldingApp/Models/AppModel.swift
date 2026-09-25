@@ -84,9 +84,20 @@ final class AppModel: ObservableObject {
         } else {
             root = openCompany?.companyRoot
         }
-        guard let root,
-              let detail = staffDirectory.loadStaffDetail(name: staff.name, team: staff.team, companyRoot: root)
-        else {
+        guard let root else {
+            lastError = "Could not load staff \(staff.name)"
+            return
+        }
+        openStaff(staff, companyRoot: root, inHolding: inHolding)
+    }
+
+    /// Open staff using an explicit company OS root (e.g. detached staffs-tree window).
+    func openStaff(_ staff: StaffNode, companyRoot: URL, inHolding: Bool) {
+        guard let detail = staffDirectory.loadStaffDetail(
+            name: staff.name,
+            team: staff.team,
+            companyRoot: companyRoot
+        ) else {
             lastError = "Could not load staff \(staff.name)"
             return
         }
