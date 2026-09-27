@@ -84,18 +84,70 @@ struct FileListSection: View {
     let systemImage: String
     let files: [CodeFileRef]
     let emptyText: String
+    /// Staff detail lists start closed; company canvas stays open.
+    var collapsed: Bool = false
     let onOpen: (CodeFileRef) -> Void
+
+    @State private var expanded: Bool
+
+    init(
+        title: String,
+        systemImage: String,
+        files: [CodeFileRef],
+        emptyText: String,
+        collapsed: Bool = false,
+        onOpen: @escaping (CodeFileRef) -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.files = files
+        self.emptyText = emptyText
+        self.collapsed = collapsed
+        self.onOpen = onOpen
+        _expanded = State(initialValue: !collapsed)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-            if files.isEmpty {
-                Text(emptyText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 0) {
+            Button {
+                guard collapsed else { return }
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Label(title, systemImage: systemImage)
+                        .font(.headline)
+                    Text("\(files.count)")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                    Spacer()
+                    if collapsed {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!collapsed)
+
+            if expanded {
+                fileRows
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var fileRows: some View {
+        if files.isEmpty {
+            Text(emptyText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(spacing: 0) {
                     ForEach(files) { file in
                         Button {
                             onOpen(file)
@@ -132,9 +184,7 @@ struct FileListSection: View {
                     }
                 }
                 .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func icon(for file: CodeFileRef) -> String {

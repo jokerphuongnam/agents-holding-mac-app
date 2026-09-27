@@ -4,6 +4,8 @@ import SwiftUI
 struct StaffDetailView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var harnessProfiles: StaffHarnessProfiles?
+    @State private var reportsExpanded = false
+    @State private var scopeExpanded = false
 
     var body: some View {
         Group {
@@ -13,11 +15,24 @@ struct StaffDetailView: View {
                         header(detail)
                         orgSection(detail)
                         scopeSection(detail)
+                        if !detail.plans.isEmpty {
+                            FileListSection(
+                                title: L10n.companyPlans,
+                                systemImage: "list.clipboard",
+                                files: detail.plans,
+                                emptyText: "",
+                                collapsed: true
+                            ) { file in
+                                appModel.openCodeFile(file)
+                            }
+                            .id(detail.node.id + "-plans")
+                        }
                         FileListSection(
                             title: L10n.skillsFiles,
                             systemImage: "book",
                             files: detail.skillFiles,
-                            emptyText: L10n.skillsEmpty(detail.node.team, detail.node.name)
+                            emptyText: L10n.skillsEmpty(detail.node.team, detail.node.name),
+                            collapsed: true
                         ) { file in
                             appModel.openSkill(
                                 SkillRef(
@@ -27,14 +42,17 @@ struct StaffDetailView: View {
                                 )
                             )
                         }
+                        .id(detail.node.id + "-skills")
                         FileListSection(
                             title: L10n.scriptsFiles,
                             systemImage: "terminal",
                             files: detail.scriptFiles,
-                            emptyText: L10n.scriptsEmpty
+                            emptyText: L10n.scriptsEmpty,
+                            collapsed: true
                         ) { file in
                             appModel.openCodeFile(file)
                         }
+                        .id(detail.node.id + "-scripts")
                         bodySection(detail)
                     }
                     .padding(24)
@@ -152,21 +170,29 @@ struct StaffDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(L10n.reportsLabel)
-                        .foregroundStyle(.secondary)
-                    if !detail.reports.isEmpty {
+                Button {
+                    reportsExpanded.toggle()
+                } label: {
+                    HStack {
+                        Text(L10n.reportsLabel)
+                            .foregroundStyle(.secondary)
                         Text("\(detail.reports.count)")
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(.quaternary, in: Capsule())
+                        Spacer()
+                        Image(systemName: reportsExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .contentShape(Rectangle())
                 }
-                if detail.reports.isEmpty {
+                .buttonStyle(.plain)
+                if reportsExpanded && detail.reports.isEmpty {
                     Text(L10n.noReportsLeaf)
                         .foregroundStyle(.tertiary)
-                } else {
+                } else if reportsExpanded {
                     VStack(spacing: 0) {
                         ForEach(detail.reports) { report in
                             Button {
@@ -208,19 +234,40 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func scopeSection(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(L10n.pathFence, systemImage: "folder.badge.gearshape")
-                .font(.headline)
-            Text(L10n.pathFenceHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            let pathCount = detail.allowedPaths.count + detail.deniedHints.count
+            Button {
+                scopeExpanded.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Label(L10n.pathFence, systemImage: "folder.badge.gearshape")
+                        .font(.headline)
+                    Text("\(pathCount)")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                    Spacer()
+                    Image(systemName: scopeExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
-            if detail.allowedPaths.isEmpty && detail.deniedHints.isEmpty {
+            if scopeExpanded {
+                Text(L10n.pathFenceHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if scopeExpanded && detail.allowedPaths.isEmpty && detail.deniedHints.isEmpty {
                 Text(L10n.pathFenceEmpty)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if !detail.allowedPaths.isEmpty {
+            if scopeExpanded && !detail.allowedPaths.isEmpty {
                 Text(L10n.allowedRw)
                     .font(.subheadline.weight(.semibold))
                 ForEach(detail.allowedPaths, id: \.self) { path in
@@ -230,7 +277,7 @@ struct StaffDetailView: View {
                 }
             }
 
-            if !detail.deniedHints.isEmpty {
+            if scopeExpanded && !detail.deniedHints.isEmpty {
                 Text(L10n.deniedMustNot)
                     .font(.subheadline.weight(.semibold))
                     .padding(.top, 4)

@@ -13,6 +13,72 @@ struct CompanyAssetsDiscovery {
         "kt", "go", "rs", "java", "c", "cpp", "cc", "h", "hpp", "cs",
     ]
 
+    /// Plans this staff owns.
+    /// Named on the owner line, or — when the file has no owner line — `po-new`.
+    func loadPlansCreatedBy(staffName: String, companyRoot: URL) -> [CodeFileRef] {
+        let name = staffName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return [] }
+        let fallback = name.caseInsensitiveCompare("po-new") == .orderedSame
+        return loadCompanyPlans(companyRoot: companyRoot).filter { file in
+            guard let text = try? String(contentsOf: file.path, encoding: .utf8) else { return false }
+            if let owner = firstOwnerLine(text) {
+                return ownerTokens(owner).contains(name.lowercased())
+            }
+            return fallback
+        }
+    }
+
+    private func firstOwnerLine(_ markdown: String) -> String? {
+        for line in markdown.components(separatedBy: .newlines).prefix(60) {
+            if let owner = ownerValue(from: line.trimmingCharacters(in: .whitespaces)) {
+                return owner
+            }
+        }
+        return nil
+    }
+
+    private func ownerTokens(_ owner: String) -> [String] {
+        owner
+            .lowercased()
+            .replacingOccurrences(of: "`", with: "")
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "-" && $0 != "_" })
+            .map(String.init)
+    }
+
+    private func ownerValue(from line: String) -> String? {
+        let stripped = line
+            .replacingOccurrences(of: "*", with: "")
+            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ">"))
+            .trimmingCharacters(in: .whitespaces)
+        let lower = stripped.lowercased()
+        let prefixes = ["plan owner:", "owner:"]
+        guard let prefix = prefixes.first(where: { lower.hasPrefix($0) }) else { return nil }
+        let value = String(stripped.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? nil : value
+    }
+
+    /// Markdown plans written by PO (`po-new` / `po-modify`) under `cache/plans/`.
+    func loadCompanyPlans(companyRoot: URL) -> [CodeFileRef] {
+        let root = companyRoot.appendingPathComponent("cache/plans")
+        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+        var out: [CodeFileRef] = []
+        for rel in recursiveRelativePaths(under: root) where isPlanFile(rel) {
+            out.append(.make(url: root.appendingPathComponent(rel), relativeTo: companyRoot))
+        }
+        return unique(out).sorted { $0.label < $1.label }
+    }
+
+    /// PO plan docs only. Skip vendored `references/` trees and READMEs.
+    private func isPlanFile(_ relativePath: String) -> Bool {
+        let rel = relativePath.lowercased()
+        guard rel.hasSuffix(".md") else { return false }
+        if rel.contains("/references/") { return false }
+        let name = (rel as NSString).lastPathComponent
+        if name == "readme.md" || name == "changelog.md" || name == "skill.md" { return false }
+        return name.contains("plan") || name.contains("roadmap")
+    }
+
     func loadCompanyWideScripts(companyRoot: URL) -> [CodeFileRef] {
         let root = companyRoot.appendingPathComponent("system/install")
         return unique(scripts(under: root, companyRoot: companyRoot)).sorted { $0.label < $1.label }

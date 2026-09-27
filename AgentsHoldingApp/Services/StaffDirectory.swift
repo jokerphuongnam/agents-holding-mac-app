@@ -83,6 +83,7 @@ struct StaffDirectory {
             companyRoot: companyRoot,
             skillIDs: skillIDs
         )
+        let plans = assets.loadPlansCreatedBy(staffName: name, companyRoot: companyRoot)
         let scriptFiles = assets.loadStaffScripts(
             staffName: name,
             team: team,
@@ -106,6 +107,7 @@ struct StaffDirectory {
             skills: skills,
             skillFiles: skillFiles,
             scriptFiles: scriptFiles,
+            plans: plans,
             allowedPaths: allowed,
             deniedHints: denied,
             bodyMarkdown: stripFrontmatter(body),

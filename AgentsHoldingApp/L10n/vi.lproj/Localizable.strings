@@ -64,6 +64,8 @@
 "staffs_tree_open_window_help" = "Mở đồ thị tổ chức staffs trong cửa sổ riêng";
 "staffs_tree_window_title" = "Staffs tree";
 "staffs_tree_recenter" = "Căn lại graph";
+"company_plans" = "Plans";
+"company_plans_empty" = "Chưa có plan trong cache/plans";
 "company_scripts" = "Scripts company (install)";
 "company_scripts_empty" = "Không có script install cấp company";
 "company_skills" = "Skills company";

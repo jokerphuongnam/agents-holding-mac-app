@@ -89,6 +89,8 @@ struct StaffDetail: Hashable {
     var skillFiles: [CodeFileRef]
     /// Scripts owned / used by this staff (under their skill dirs; ceo + hop scripts).
     var scriptFiles: [CodeFileRef]
+    /// Plans under `cache/plans/` whose owner starts with this staff (PO who created them).
+    var plans: [CodeFileRef] = []
     var allowedPaths: [String]
     var deniedHints: [String]
     var bodyMarkdown: String
