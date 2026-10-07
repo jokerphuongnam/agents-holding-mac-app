@@ -127,23 +127,15 @@ struct HoldingDiscovery {
 
     private func loadCompaniesFromScan(holdingPackage: URL) -> [CompanyNode] {
         guard let script = companyRegistryScript(holdingPackage: holdingPackage) else { return [] }
-        // Default scan roots: Language tree + Agents tree (where companies usually live).
-        let roots = [
-            NSHomeDirectory() + "/Documents/Code/Language",
-            NSHomeDirectory() + "/Documents/Agents",
-        ]
+        // No --root: company_registry.py scans Documents, Desktop, Projects, … (depth 6).
+        // Hard-coded Language/Agents roots missed companies under Documents/Code.
+        guard let output = runPython(script, arguments: ["scan"]) else { return [] }
         var found: [CompanyNode] = []
         var seen = Set<String>()
-        for root in roots where FileManager.default.fileExists(atPath: root) {
-            guard let output = runPython(
-                script,
-                arguments: ["scan", "--root", root, "--max-depth", "8"]
-            ) else { continue }
-            for company in parseScanTSV(output) {
-                let key = publicIdentityKey(company)
-                if seen.insert(key).inserted {
-                    found.append(company)
-                }
+        for company in parseScanTSV(output) {
+            let key = publicIdentityKey(company)
+            if seen.insert(key).inserted {
+                found.append(company)
             }
         }
         return found.sorted {

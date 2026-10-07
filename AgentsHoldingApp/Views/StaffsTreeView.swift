@@ -11,13 +11,9 @@ import SwiftUI
 struct StaffsTreeView: View {
     let roots: [StaffTreeNode]
     var showsHeading: Bool = true
-    /// Cap for the embedded graph. `nil` fills the parent (detached window).
+    /// Cap for the embedded graph. `nil` fills the parent.
     var viewportMaxHeight: CGFloat? = 900
-    /// When set, shows a control that opens this graph in a dedicated window.
-    var windowID: StaffsTreeWindowID? = nil
     let onSelect: (StaffNode) -> Void
-
-    @Environment(\.openWindow) private var openWindow
     @StateObject private var zoomState = OrgGraphZoomState()
     @State private var didCenterCEO = false
 
@@ -46,17 +42,6 @@ struct StaffsTreeView: View {
                 Spacer()
                 if !roots.isEmpty {
                     zoomToolbar
-                    if let windowID {
-                        Button {
-                            StaffsTreeWindowGate.markIntentionalOpen()
-                            openWindow(id: "staffs-tree", value: windowID)
-                        } label: {
-                            Label(L10n.staffsTreeOpenWindow, systemImage: "macwindow")
-                        }
-                        .buttonStyle(.borderless)
-                        .help(L10n.staffsTreeOpenWindowHelp)
-                        .controlSize(.small)
-                    }
                 }
             }
             if showsHeading {

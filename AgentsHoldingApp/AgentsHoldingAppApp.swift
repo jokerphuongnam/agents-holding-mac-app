@@ -6,7 +6,8 @@ struct AgentsHoldingAppApp: App {
     @ObservedObject private var languageStore = LanguageStore.shared
 
     var body: some Scene {
-        WindowGroup("Agents Holding") {
+        // `Window` is a single instance. `WindowGroup` restores and duplicates windows.
+        Window("Agents Holding", id: "main") {
             RootView()
                 .environmentObject(appModel)
                 .environmentObject(languageStore)
@@ -14,28 +15,10 @@ struct AgentsHoldingAppApp: App {
                 .id(languageStore.revision)
                 .frame(minWidth: 960, minHeight: 640)
         }
+        .defaultSize(width: 1200, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
-
-        // May be session-restored on launch — StaffsTreeWindowView dismisses unless
-        // StaffsTreeWindowGate was marked by the toolbar button.
-        WindowGroup(
-            L10n.staffsTreeWindowTitle,
-            id: "staffs-tree",
-            for: StaffsTreeWindowID.self
-        ) { $windowID in
-            if let windowID {
-                StaffsTreeWindowView(windowID: windowID)
-                    .environmentObject(appModel)
-                    .environmentObject(languageStore)
-                    .environment(\.locale, languageStore.locale)
-                    .id(languageStore.revision)
-            } else {
-                StaffsTreeWindowDiscardView()
-            }
-        }
-        .defaultSize(width: 1100, height: 860)
 
         Settings {
             SettingsView()

@@ -40,12 +40,7 @@ struct CompanyCanvasView: View {
                             StaffsTreeView(
                                 roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
                                 showsHeading: false,
-                                viewportMaxHeight: 900,
-                                windowID: StaffsTreeWindowID(
-                                    companyRootPath: snap.companyRoot.path,
-                                    title: "\(snap.node.displayName) · \(L10n.staffsTree)",
-                                    inHolding: false
-                                )
+                                viewportMaxHeight: 900
                             ) { staff in
                                 appModel.openStaff(staff, inHolding: false)
                             }

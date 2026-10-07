@@ -125,6 +125,11 @@ struct StaffDirectory {
         let explicit = row?.lead.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !explicit.isEmpty { return explicit }
 
+        // Same rule as hop.py: one *-lead in the staff folder owns that team.
+        if let folderLead = soleFolderLead(named: name, companyRoot: companyRoot), folderLead != name {
+            return folderLead
+        }
+
         let top = topDispatcher(in: agents, companyRoot: companyRoot)
         if name == top { return nil }
 
@@ -134,6 +139,33 @@ struct StaffDirectory {
             atPath: companyRoot.appendingPathComponent("system/staffs/leadership/\(top).md").path
         ) {
             return top
+        }
+        return nil
+    }
+
+    /// The single `*-lead` sitting next to this staff file, if there is exactly one.
+    private func soleFolderLead(named name: String, companyRoot: URL) -> String? {
+        let staffsRoot = companyRoot.appendingPathComponent("system/staffs")
+        guard let match = staffFile(named: name, under: staffsRoot) else { return nil }
+        let folder = match.deletingLastPathComponent()
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return nil }
+        let leads = names.compactMap { file -> String? in
+            guard file.hasSuffix(".md") else { return nil }
+            let stem = (file as NSString).deletingPathExtension
+            guard stem.hasSuffix("-lead"), stem != "ceo", stem != "holding-ceo" else { return nil }
+            return stem
+        }
+        return leads.count == 1 ? leads[0] : nil
+    }
+
+    private func staffFile(named name: String, under root: URL) -> URL? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        for case let url as URL in enumerator {
+            if url.lastPathComponent == "\(name).md" { return url }
         }
         return nil
     }
