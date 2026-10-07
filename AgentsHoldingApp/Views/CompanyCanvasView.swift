@@ -22,37 +22,37 @@ struct CompanyCanvasView: View {
     var body: some View {
         Group {
             if let snap = appModel.openCompany {
-                VStack(alignment: .leading, spacing: 16) {
-                    header(snap)
-                    childrenSection(snap)
-                    Picker("", selection: $rosterTab) {
-                        ForEach(CompanyRosterTab.allCases) { tab in
-                            Text(tab.title).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 420)
-
-                    switch rosterTab {
-                    case .tree:
-                        StaffsTreeView(
-                            roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
-                            showsHeading: false,
-                            viewportMaxHeight: nil
-                        ) { staff in
-                            appModel.openStaff(staff, inHolding: false)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    case .list:
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 28) {
-                                teamsSection(snap)
-                                companyAssets(snap)
+                ScrollViewReader { proxy in
+                    ScrollView([.horizontal, .vertical]) {
+                        VStack(alignment: .leading, spacing: 28) {
+                            header(snap)
+                            childrenSection(snap)
+                            Picker("", selection: $rosterTab) {
+                                ForEach(CompanyRosterTab.allCases) { tab in
+                                    Text(tab.title).tag(tab)
+                                }
                             }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 420)
+
+                            switch rosterTab {
+                            case .tree:
+                                StaffsTreeView(
+                                    roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
+                                    showsHeading: false,
+                                    scrollProxy: proxy
+                                ) { staff in
+                                    appModel.openStaff(staff, inHolding: false)
+                                }
+                            case .list:
+                                teamsSection(snap)
+                            }
+                            companyAssets(snap)
                         }
+                        .padding(24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(24)
                 .navigationTitle(snap.node.displayName)
                 .onAppear { appModel.refreshOpenCompany() }
                 .toolbar {

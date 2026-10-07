@@ -14,18 +14,22 @@ struct HoldingCanvasView: View {
                     description: Text(error)
                 )
             } else if let holding = appModel.holding {
-                VStack(alignment: .leading, spacing: 16) {
-                    header(holding)
-                    companiesSection(holding)
-                    StaffsTreeView(
-                        roots: StaffDirectory().buildStaffTree(companyRoot: holding.packageRoot),
-                        viewportMaxHeight: nil
-                    ) { staff in
-                        appModel.openStaff(staff, inHolding: true)
+                ScrollViewReader { proxy in
+                    ScrollView([.horizontal, .vertical]) {
+                        VStack(alignment: .leading, spacing: 28) {
+                            header(holding)
+                            companiesSection(holding)
+                            StaffsTreeView(
+                                roots: StaffDirectory().buildStaffTree(companyRoot: holding.packageRoot),
+                                scrollProxy: proxy
+                            ) { staff in
+                                appModel.openStaff(staff, inHolding: true)
+                            }
+                        }
+                        .padding(24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(24)
             } else {
                 ProgressView("Loading holding…")
             }
@@ -94,16 +98,13 @@ struct HoldingCanvasView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(holding.companies) { company in
-                            CompanyCard(company: company) {
-                                appModel.openCompanyNode(company)
-                            }
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(holding.companies) { company in
+                        CompanyCard(company: company) {
+                            appModel.openCompanyNode(company)
                         }
                     }
                 }
-                .frame(maxHeight: 220)
             }
         }
     }
