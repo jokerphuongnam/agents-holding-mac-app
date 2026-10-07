@@ -22,59 +22,37 @@ struct CompanyCanvasView: View {
     var body: some View {
         Group {
             if let snap = appModel.openCompany {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        header(snap)
-
-                        childrenSection(snap)
-                        Picker("", selection: $rosterTab) {
-                            ForEach(CompanyRosterTab.allCases) { tab in
-                                Text(tab.title).tag(tab)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 420)
-
-                        switch rosterTab {
-                        case .tree:
-                            StaffsTreeView(
-                                roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
-                                showsHeading: false,
-                                viewportMaxHeight: 900
-                            ) { staff in
-                                appModel.openStaff(staff, inHolding: false)
-                            }
-                        case .list:
-                            teamsSection(snap)
-                        }
-                        // Only company-scoped assets here; role skills/scripts live on staff detail.
-                        if !snap.skills.isEmpty {
-                            FileListSection(
-                                title: L10n.companySkills,
-                                systemImage: "book",
-                                files: snap.skills,
-                                emptyText: ""
-                            ) { file in
-                                appModel.openSkill(
-                                    SkillRef(
-                                        skillID: file.path.deletingLastPathComponent().lastPathComponent,
-                                        title: file.fileName,
-                                        path: file.path
-                                    )
-                                )
-                            }
-                        }
-                        FileListSection(
-                            title: L10n.companyScripts,
-                            systemImage: "terminal",
-                            files: snap.scripts,
-                            emptyText: L10n.companyScriptsEmpty
-                        ) { file in
-                            appModel.openCodeFile(file)
+                VStack(alignment: .leading, spacing: 16) {
+                    header(snap)
+                    childrenSection(snap)
+                    Picker("", selection: $rosterTab) {
+                        ForEach(CompanyRosterTab.allCases) { tab in
+                            Text(tab.title).tag(tab)
                         }
                     }
-                    .padding(24)
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 420)
+
+                    switch rosterTab {
+                    case .tree:
+                        StaffsTreeView(
+                            roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
+                            showsHeading: false,
+                            viewportMaxHeight: nil
+                        ) { staff in
+                            appModel.openStaff(staff, inHolding: false)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .list:
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 28) {
+                                teamsSection(snap)
+                                companyAssets(snap)
+                            }
+                        }
+                    }
                 }
+                .padding(24)
                 .navigationTitle(snap.node.displayName)
                 .onAppear { appModel.refreshOpenCompany() }
                 .toolbar {
@@ -158,6 +136,34 @@ struct CompanyCanvasView: View {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func companyAssets(_ snap: CompanySnapshot) -> some View {
+        if !snap.skills.isEmpty {
+            FileListSection(
+                title: L10n.companySkills,
+                systemImage: "book",
+                files: snap.skills,
+                emptyText: ""
+            ) { file in
+                appModel.openSkill(
+                    SkillRef(
+                        skillID: file.path.deletingLastPathComponent().lastPathComponent,
+                        title: file.fileName,
+                        path: file.path
+                    )
+                )
+            }
+        }
+        FileListSection(
+            title: L10n.companyScripts,
+            systemImage: "terminal",
+            files: snap.scripts,
+            emptyText: L10n.companyScriptsEmpty
+        ) { file in
+            appModel.openCodeFile(file)
         }
     }
 

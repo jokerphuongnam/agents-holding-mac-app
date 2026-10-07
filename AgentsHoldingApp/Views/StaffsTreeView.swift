@@ -15,7 +15,6 @@ struct StaffsTreeView: View {
     var viewportMaxHeight: CGFloat? = 900
     let onSelect: (StaffNode) -> Void
     @StateObject private var zoomState = OrgGraphZoomState()
-    @State private var didCenterCEO = false
 
     private var focusStaffId: String? {
         let ids = roots.map(\.staff.id)
@@ -68,6 +67,7 @@ struct StaffsTreeView: View {
                     // Live zoom is cheap scale only — layoutZoom rebuild waits until idle bake.
                     .scaleEffect(zoomState.live.rubber, anchor: .topLeading)
                     .offset(zoomState.live.offset)
+                    .opacity(zoomState.contentVisible ? 1 : 0)
                     .gesture(panDragGesture)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -77,9 +77,15 @@ struct StaffsTreeView: View {
             .onAppear {
                 zoomState.viewportSize = viewportGeo.size
                 zoomState.installEventMonitors()
+                if !zoomState.userAdjusted {
+                    _ = zoomState.revealCentered(focusId: focusStaffId)
+                }
             }
             .onChange(of: viewportGeo.size) { _, newSize in
                 zoomState.viewportSize = newSize
+                if !zoomState.userAdjusted {
+                    _ = zoomState.revealCentered(focusId: focusStaffId)
+                }
             }
             .onDisappear {
                 zoomState.removeEventMonitors()
@@ -91,8 +97,12 @@ struct StaffsTreeView: View {
             .highPriorityGesture(pinchZoomGesture)
             .onPreferenceChange(CardFrameKey.self) { frames in
                 zoomState.cardFrames = frames
-                zoomState.repinLockedCardIfNeeded()
-                centerCEOIfNeeded(viewport: viewportGeo.size)
+                zoomState.viewportSize = viewportGeo.size
+                if zoomState.userAdjusted {
+                    zoomState.repinLockedCardIfNeeded()
+                } else {
+                    _ = zoomState.revealCentered(focusId: focusStaffId)
+                }
             }
         }
         .frame(
@@ -134,7 +144,7 @@ struct StaffsTreeView: View {
                 .disabled(abs(zoomState.displayZoom - 1) < 0.01 && abs(zoomState.live.rubber - 1) < 0.01)
 
             Button {
-                zoomState.resetViewToOrigin()
+                zoomState.resetViewToOrigin(focusId: focusStaffId)
             } label: {
                 Image(systemName: "arrow.uturn.backward")
             }
@@ -170,12 +180,6 @@ struct StaffsTreeView: View {
             .onEnded { _ in zoomState.endPinch() }
     }
 
-    private func centerCEOIfNeeded(viewport: CGSize) {
-        guard !didCenterCEO, let focusStaffId, viewport.width > 1, viewport.height > 1 else { return }
-        guard let frame = zoomState.cardFrames[focusStaffId] else { return }
-        zoomState.centerContentPoint(CGPoint(x: frame.midX, y: frame.midY), in: viewport)
-        didCenterCEO = true
-    }
 }
 
 // MARK: - Viewport host (mouse → focal in view coords)
@@ -236,6 +240,10 @@ private final class OrgGraphZoomState: ObservableObject {
     @Published var layoutZoom: CGFloat = 1.0
     @Published var live = LiveZoomTransform()
     @Published private(set) var isLiveZooming = false
+    /// Hide the graph until the first CEO center, so reset does not flash the origin frame.
+    @Published var contentVisible = false
+    /// Pan or zoom. Initial centering stops once the user moves the graph.
+    private(set) var userAdjusted = false
 
     let viewportBridge = ViewportBridge()
     var isHovered = false
@@ -270,8 +278,14 @@ private final class OrgGraphZoomState: ObservableObject {
         return CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
     }
 
-    func zoomInTowardFocal() { nudgeRubber(factor: 1.1) }
-    func zoomOutTowardFocal() { nudgeRubber(factor: 1 / 1.1) }
+    func zoomInTowardFocal() {
+        userAdjusted = true
+        nudgeRubber(factor: 1.1)
+    }
+    func zoomOutTowardFocal() {
+        userAdjusted = true
+        nudgeRubber(factor: 1 / 1.1)
+    }
 
     func resetTowardFocal() {
         bakeWork?.cancel()
@@ -283,30 +297,69 @@ private final class OrgGraphZoomState: ObservableObject {
         scheduleBake(delay: buttonBakeDelay)
     }
 
-    /// Clear pan/zoom drift (blank viewport after heavy trackpad flings).
-    func resetViewToOrigin() {
+    /// Clear pan/zoom drift. If CEO is already centered at 1×, leave the graph alone.
+    func resetViewToOrigin(focusId: String?) {
         bakeWork?.cancel()
         clearLock()
         isPinching = false
         isPanning = false
         isLiveZooming = false
+        userAdjusted = false
+
+        let zoomIsIdentity = abs(layoutZoom - 1) < 0.01 && abs(live.rubber - 1) < 0.01
+        if zoomIsIdentity, let frame = focusFrame(focusId) {
+            let target = CGSize(
+                width: viewportSize.width / 2 - frame.midX,
+                height: viewportSize.height / 2 - frame.midY
+            )
+            let alreadyCentered = abs(target.width - live.offset.width) < 1.5
+                && abs(target.height - live.offset.height) < 1.5
+            if alreadyCentered {
+                contentVisible = true
+                return
+            }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                centerContentPoint(CGPoint(x: frame.midX, y: frame.midY), in: viewportSize)
+                contentVisible = true
+            }
+            return
+        }
+
+        // Zoom bake changes card frames. Hide only until that next layout reports them.
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
+            contentVisible = false
             layoutZoom = 1.0
             live = LiveZoomTransform()
         }
-        // Re-center on CEO / first root after the next frame reports card frames.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            if let id = self.cardFrames.keys.first(where: { $0 == "holding-ceo" || $0.hasSuffix("/ceo") || $0 == "ceo" })
-                ?? self.cardFrames.keys.first,
-               let frame = self.cardFrames[id],
-               self.viewportSize.width > 1 {
-                self.centerContentPoint(CGPoint(x: frame.midX, y: frame.midY), in: self.viewportSize)
-            }
-            self.clampLiveOffset()
+    }
+
+    private func focusFrame(_ focusId: String?) -> CGRect? {
+        guard viewportSize.width > 1, viewportSize.height > 1 else { return nil }
+        if let focusId, let frame = cardFrames[focusId] { return frame }
+        let id = cardFrames.keys.first(where: {
+            $0 == "holding-ceo" || $0 == "ceo" || $0.hasSuffix("/ceo")
+        }) ?? cardFrames.keys.first
+        return id.flatMap { cardFrames[$0] }
+    }
+
+    /// Center `focusId` once card frames match the reset layout. Returns whether the graph can show.
+    func revealCentered(focusId: String?) -> Bool {
+        guard viewportSize.width > 1, viewportSize.height > 1 else { return false }
+        let id = focusId.flatMap { cardFrames[$0] != nil ? $0 : nil }
+            ?? cardFrames.keys.first(where: { $0 == "holding-ceo" || $0 == "ceo" || $0.hasSuffix("/ceo") })
+            ?? cardFrames.keys.first
+        guard let id, let frame = cardFrames[id], frame.width > 8, frame.height > 8 else { return false }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            centerContentPoint(CGPoint(x: frame.midX, y: frame.midY), in: viewportSize)
+            contentVisible = true
         }
+        return true
     }
 
     private func nudgeRubber(factor: CGFloat) {
@@ -322,6 +375,7 @@ private final class OrgGraphZoomState: ObservableObject {
 
     /// SwiftUI `MagnificationGesture` — value is absolute scale from gesture start (1.0…).
     func applySwiftUIPinch(_ magnification: CGFloat) {
+        userAdjusted = true
         let focal = focalInViewport()
         if !isPinching {
             isPinching = true
@@ -337,6 +391,7 @@ private final class OrgGraphZoomState: ObservableObject {
 
     /// AppKit trackpad pinch — `delta` is incremental (`event.magnification`).
     func applyTrackpadMagnify(delta: CGFloat, phase: NSEvent.Phase) {
+        userAdjusted = true
         let focal = focalInViewport()
         if phase.contains(.began) || !isPinching {
             isPinching = true
@@ -365,6 +420,7 @@ private final class OrgGraphZoomState: ObservableObject {
     }
 
     func panDragChanged(translation: CGSize) {
+        userAdjusted = true
         if !isPanning {
             isPanning = true
             panDragStart = live.offset
