@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.openWindow) private var openWindow
     @State private var model = RootScreenModel()
 
     var body: some View {
@@ -12,6 +13,19 @@ struct RootView: View {
             detail
         }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                if case .company = appModel.selection, appModel.openCompany != nil {
+                    Button {
+                        guard let company = appModel.openCompany else { return }
+                        openWindow(id: "company-chat", value: ChatWindowTarget(
+                            companyRoot: company.companyRoot.path,
+                            projectRoot: company.node.projectRoot?.path
+                        ))
+                    } label: {
+                        Label(L10nLookup("chat_open", "Localizable", "Open chat"), systemImage: "bubble.left.and.bubble.right")
+                    }
+                }
+            }
             ToolbarItem(placement: .automatic) {
                 LanguagePickerButton()
             }

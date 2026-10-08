@@ -20,6 +20,17 @@
 "parent" = "Parent";
 "holding" = "Holding";
 "usage" = "Usage";
+"chat_open" = "Open chat";
+"chat_title" = "Chat";
+"chat_rooms" = "Rooms";
+"chat_empty" = "No rooms yet. Launch this company once to create a room.";
+"chat_ceo" = "CEO";
+"chat_working" = "Working";
+"chat_recap" = "Recap";
+"chat_send" = "Send";
+"chat_placeholder" = "Message";
+"chat_thread" = "Thread";
+"chat_mirror" = "Mirror git into company history";
 "settings" = "Settings";
 "navigate" = "Navigate";
 "actions" = "Actions";

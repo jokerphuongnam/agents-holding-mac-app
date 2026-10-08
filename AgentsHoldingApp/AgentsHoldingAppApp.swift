@@ -20,6 +20,21 @@ struct AgentsHoldingAppApp: App {
             CommandGroup(replacing: .newItem) {}
         }
 
+        WindowGroup(id: "company-chat", for: ChatWindowTarget.self) { $target in
+            if let target {
+                CompanyChatView(
+                    companyRoot: URL(fileURLWithPath: target.companyRoot),
+                    projectRoot: target.projectRoot.map { URL(fileURLWithPath: $0) }
+                )
+                .environment(appModel)
+                .environmentObject(languageStore)
+                .environment(\.locale, languageStore.locale)
+                .id(languageStore.revision)
+                .frame(minWidth: 640, minHeight: 480)
+            }
+        }
+        .defaultSize(width: 720, height: 560)
+
         Settings {
             SettingsView()
                 .environment(appModel)
