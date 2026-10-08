@@ -269,6 +269,8 @@
 "harness_profiles_subtitle" = "%@ · tier %@";
 "harness_profiles_help" = "Tier is this staff. Model and effort apply to every staff on that tier. Merge runtime is this staff, and is used when split runtimes is on.";
 "harness_tier" = "Tier";
+"open_graph" = "Open graph";
+"open_graph_help" = "Open this project in Code Prism";
 "harness_router_toggle" = "Split runtimes";
 "harness_shared_tier" = "Shared by every staff on tier %@.";
 "harness_col_mode" = "Mode";

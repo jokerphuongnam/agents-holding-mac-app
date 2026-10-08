@@ -269,6 +269,8 @@
 "harness_profiles_subtitle" = "%@ · tier %@";
 "harness_profiles_help" = "Tier là của staff này. Model và effort dùng chung cho mọi staff cùng tier. Runtime merge là của staff này, và chỉ có hiệu lực khi bật tách runtime.";
 "harness_tier" = "Tier";
+"open_graph" = "Mở graph";
+"open_graph_help" = "Mở project này trong Code Prism";
 "harness_router_toggle" = "Tách runtime";
 "harness_shared_tier" = "Dùng chung cho mọi staff ở tier %@.";
 "harness_col_mode" = "Mode";

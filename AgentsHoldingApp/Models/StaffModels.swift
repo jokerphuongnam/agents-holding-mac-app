@@ -100,4 +100,6 @@ struct StaffDetail: Hashable {
     var sourceFile: URL
     /// Company OS root used to resolve skills/scope (`…/*-company` or holding package).
     var companyRoot: URL
+    /// This staff's job is the Code Prism graph (`requires: prism` or a code-graph skill). The display name can differ.
+    var worksWithPrism: Bool = false
 }

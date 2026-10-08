@@ -121,7 +121,8 @@ struct StaffDirectory {
             deniedHints: denied,
             bodyMarkdown: stripFrontmatter(body),
             sourceFile: staffFile,
-            companyRoot: companyRoot
+            companyRoot: companyRoot,
+            worksWithPrism: worksWithPrism(body: body, skillIDs: skillIDs, name: name)
         )
     }
 
@@ -419,6 +420,16 @@ struct StaffDirectory {
             out.append(t)
         }
         return out
+    }
+
+    /// Prism owner: frontmatter `requires` lists prism, or a granted skill is the code-graph index. Name is not the key.
+    private func worksWithPrism(body: String, skillIDs: [String], name: String) -> Bool {
+        let requires = (frontmatter(body, key: "requires") ?? "")
+            .split { $0 == "," || $0.isWhitespace }
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        if requires.contains("prism") || requires.contains("prism-mcp") { return true }
+        if skillIDs.contains(where: { $0.lowercased().contains("code-graph") }) { return true }
+        return name == "code-graph"
     }
 
     private func frontmatter(_ text: String, key: String) -> String? {

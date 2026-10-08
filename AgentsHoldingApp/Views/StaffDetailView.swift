@@ -3,6 +3,19 @@ import MarkdownUI
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// `codeprism://open?root=<project>` opens the Code Prism mac app on that folder.
+enum PrismAppLink {
+    static func url(projectRoot: URL) -> URL? {
+        var components = URLComponents()
+        components.scheme = "codeprism"
+        components.host = "open"
+        components.queryItems = [
+            URLQueryItem(name: "root", value: projectRoot.standardizedFileURL.path)
+        ]
+        return components.url
+    }
+}
+
 private enum FenceKind {
     case allow
     case deny
@@ -225,6 +238,15 @@ struct StaffDetailView: View {
                 if !detail.capabilityMode.isEmpty {
                     badge(detail.capabilityMode)
                 }
+                if detail.worksWithPrism, let root = prismProjectRoot(detail) {
+                    Button {
+                        guard let link = PrismAppLink.url(projectRoot: root) else { return }
+                        NSWorkspace.shared.open(link)
+                    } label: {
+                        Label(L10n.openGraph, systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+                    .help(L10n.openGraphHelp)
+                }
             }
             if !detail.node.blurb.isEmpty {
                 Text(detail.node.blurb)
@@ -233,6 +255,18 @@ struct StaffDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Product folder Prism should open. Company OS lives under `.agents/`.
+    private func prismProjectRoot(_ detail: StaffDetail) -> URL? {
+        if let root = appModel.openCompany?.node.projectRoot {
+            return root
+        }
+        let path = detail.companyRoot.standardizedFileURL.path
+        if let range = path.range(of: "/.agents/") {
+            return URL(fileURLWithPath: String(path[..<range.lowerBound]))
+        }
+        return detail.companyRoot
     }
 
     @ViewBuilder
