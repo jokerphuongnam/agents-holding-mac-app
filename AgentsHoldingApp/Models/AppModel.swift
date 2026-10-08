@@ -1,21 +1,22 @@
 import AppKit
-import Combine
 import Foundation
+import Observation
 
 /// App-wide navigation + discovered holding/company graph (P0 read model).
 @MainActor
-final class AppModel: ObservableObject {
-    @Published var holdingPath: URL?
-    @Published var holding: HoldingSnapshot?
-    @Published var openCompany: CompanySnapshot?
-    @Published var selection: NavigationSelection = .holding
-    @Published var lastError: String?
-    @Published var companyStack: [CompanyNode] = []
-    @Published var staffDetail: StaffDetail?
-    @Published var openSkill: SkillRef?
-    @Published var openCodeFile: CodeFileRef?
+@Observable
+final class AppModel {
+    var holdingPath: URL?
+    var holding: HoldingSnapshot?
+    var openCompany: CompanySnapshot?
+    var selection: NavigationSelection = .holding
+    var lastError: String?
+    var companyStack: [CompanyNode] = []
+    var staffDetail: StaffDetail?
+    var openSkill: SkillRef?
+    var openCodeFile: CodeFileRef?
     /// Scope for Usage screen (holding / company+children / staff).
-    @Published var usageScope: UsageScope = .holdingAll
+    var usageScope: UsageScope = .holdingAll
 
     /// When viewing holding staff, company OS root is the holding package.
     private(set) var holdingPackageRoot: URL?

@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Dedicated window hosting a full-height staffs org graph.
 struct StaffsTreeWindowView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = StaffsTreeScreenModel()
     @Environment(\.dismissWindow) private var dismissWindow
     let windowID: StaffsTreeWindowID
 
@@ -11,13 +12,14 @@ struct StaffsTreeWindowView: View {
     }
 
     var body: some View {
+        let _ = model.attach(appModel)
         StaffsTreeView(
             roots: StaffDirectory().buildStaffTree(companyRoot: companyRoot),
             showsHeading: true,
             viewportMaxHeight: nil,
             companyRoot: companyRoot
         ) { staff in
-            appModel.openStaff(staff, companyRoot: companyRoot, inHolding: windowID.inHolding)
+            model.send(.open(staff, companyRoot: companyRoot, inHolding: windowID.inHolding))
         }
         .padding(16)
         .frame(minWidth: 900, minHeight: 640)

@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = SettingsScreenModel()
     @EnvironmentObject private var languageStore: LanguageStore
     @AppStorage("holdingPath") private var holdingPath: String = ""
 
     var body: some View {
+        let _ = model.attach(appModel)
         Form {
             Section(L10n.languageSection) {
                 Picker(L10n.languagePicker, selection: $languageStore.language) {
@@ -29,10 +31,10 @@ struct SettingsView: View {
                 Button(L10n.useDocumentsHolding) {
                     let p = NSHomeDirectory() + "/Documents/Agents/agents-holding"
                     holdingPath = p
-                    appModel.reloadHolding()
+                    model.send(.reload)
                 }
                 Button(L10n.applyReload) {
-                    appModel.reloadHolding()
+                    model.send(.reload)
                 }
             }
         }

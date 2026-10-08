@@ -2,10 +2,12 @@ import SwiftUI
 
 /// Holding home: companies + holding personnel (teams/staffs).
 struct HoldingCanvasView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = HoldingScreenModel()
     @State private var showAddCompany = false
 
     var body: some View {
+        let _ = model.attach(appModel)
         Group {
             if let error = appModel.lastError, appModel.holding == nil {
                 ContentUnavailableView(
@@ -24,7 +26,7 @@ struct HoldingCanvasView: View {
                                 scrollProxy: proxy,
                                 companyRoot: holding.packageRoot
                             ) { staff in
-                                appModel.openStaff(staff, inHolding: true)
+                                model.send(.openStaff(staff))
                             }
                         }
                         .padding(24)
@@ -39,7 +41,7 @@ struct HoldingCanvasView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    appModel.openUsageHolding()
+                    model.send(.openUsage)
                 } label: {
                     Label(L10n.usage, systemImage: "chart.bar.xaxis")
                 }
@@ -54,7 +56,7 @@ struct HoldingCanvasView: View {
         }
         .sheet(isPresented: $showAddCompany) {
             AddCompanySheet()
-                .environmentObject(appModel)
+                .environment(appModel)
         }
     }
 
@@ -88,7 +90,7 @@ struct HoldingCanvasView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    appModel.chooseCompanyScanFolder()
+                    model.send(.chooseScanFolder)
                 } label: {
                     Label(L10n.scanFolder, systemImage: "folder.badge.plus")
                 }
@@ -109,7 +111,7 @@ struct HoldingCanvasView: View {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(holding.companies) { company in
                         CompanyCard(company: company) {
-                            appModel.openCompanyNode(company)
+                            model.send(.openCompany(company))
                         }
                     }
                 }

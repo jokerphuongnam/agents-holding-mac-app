@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Add company wizard — catalog-first roster with per-staff editor.
 struct AddCompanySheet: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = AddCompanyScreenModel()
     @Environment(\.dismiss) private var dismiss
 
     enum Step: Int, CaseIterable {
@@ -50,6 +51,7 @@ struct AddCompanySheet: View {
     private let catalog = TemplateCatalogService()
 
     var body: some View {
+        let _ = model.attach(appModel)
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
@@ -496,7 +498,7 @@ struct AddCompanySheet: View {
             )
             let output = try installer.install(request, holdingRoot: holding)
             log = output.isEmpty ? "OK" : output
-            appModel.reloadHolding()
+            model.send(.reloadHolding)
             try? await Task.sleep(nanoseconds: 400_000_000)
             dismiss()
         } catch {

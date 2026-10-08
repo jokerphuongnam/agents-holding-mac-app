@@ -2,14 +2,14 @@ import SwiftUI
 
 @main
 struct AgentsHoldingAppApp: App {
-    @StateObject private var appModel = AppModel()
+    @State private var appModel = AppModel()
     @ObservedObject private var languageStore = LanguageStore.shared
 
     var body: some Scene {
         // `Window` is a single instance. `WindowGroup` restores and duplicates windows.
         Window("Agents Holding", id: "main") {
             RootView()
-                .environmentObject(appModel)
+                .environment(appModel)
                 .environmentObject(languageStore)
                 .environment(\.locale, languageStore.locale)
                 .id(languageStore.revision)
@@ -22,7 +22,7 @@ struct AgentsHoldingAppApp: App {
 
         Settings {
             SettingsView()
-                .environmentObject(appModel)
+                .environment(appModel)
                 .environmentObject(languageStore)
                 .environment(\.locale, languageStore.locale)
                 .id(languageStore.revision)

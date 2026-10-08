@@ -16,22 +16,6 @@ enum PrismAppLink {
     }
 }
 
-struct NameEditButton: View {
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "pencil")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
-                .background(.quaternary.opacity(0.9), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .help(L10n.edit)
-    }
-}
-
 private enum FenceKind {
     case allow
     case deny
@@ -94,7 +78,8 @@ private struct PathFencePicker: View {
 }
 
 struct StaffDetailView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = StaffScreenModel()
     @State private var harnessProfiles: StaffHarnessProfiles?
     @State private var staffNameDraft = ""
     @State private var editingStaffName = false
@@ -107,6 +92,7 @@ struct StaffDetailView: View {
     @State private var fenceDenied: [String] = []
 
     var body: some View {
+        let _ = model.attach(appModel)
         Group {
             if let detail = appModel.staffDetail {
                 ScrollView {
@@ -133,7 +119,7 @@ struct StaffDetailView: View {
                                 },
                                 onDelete: { delete($0) }
                             ) { file in
-                                appModel.openCodeFile(file)
+                                model.send(.openCodeFile(file))
                             }
                             .id(detail.node.id + "-plans")
                         }
@@ -156,13 +142,11 @@ struct StaffDetailView: View {
                             },
                             onDelete: { delete($0) }
                         ) { file in
-                            appModel.openSkill(
-                                SkillRef(
-                                    skillID: file.path.deletingLastPathComponent().lastPathComponent,
-                                    title: file.fileName,
-                                    path: file.path
-                                )
-                            )
+                            model.send(.openSkill(SkillRef(
+                                skillID: file.path.deletingLastPathComponent().lastPathComponent,
+                                title: file.fileName,
+                                path: file.path
+                            )))
                         }
                         .id(detail.node.id + "-skills")
                         FileListSection(
@@ -185,7 +169,7 @@ struct StaffDetailView: View {
                             },
                             onDelete: { delete($0) }
                         ) { file in
-                            appModel.openCodeFile(file)
+                            model.send(.openCodeFile(file))
                         }
                         .id(detail.node.id + "-scripts")
                         bodySection(detail)
@@ -199,12 +183,12 @@ struct StaffDetailView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(L10n.back) { appModel.backFromStaff() }
+                        Button(L10n.back) { model.send(.back) }
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             let inHolding = appModel.openCompany == nil
-                            appModel.openUsageForStaff(detail.node.name, inHolding: inHolding)
+                            model.send(.openUsage(name: detail.node.name, inHolding: inHolding))
                         } label: {
                             Label(L10n.usage, systemImage: "chart.bar.xaxis")
                         }
@@ -234,7 +218,7 @@ struct StaffDetailView: View {
                         .font(.largeTitle.weight(.semibold))
                         .contextMenu {
                             Button(L10n.deleteStaff, role: .destructive) {
-                                appModel.removeStaff(detail.node, companyRoot: detail.companyRoot)
+                                model.send(.remove(detail.node, detail.companyRoot))
                             }
                         }
                 }
@@ -313,7 +297,7 @@ struct StaffDetailView: View {
             staffNameDraft = detail.node.name
             return
         }
-        appModel.renameStaff(detail, to: trimmed)
+        model.send(.rename(detail, trimmed))
     }
 
     /// Product folder Prism should open. Company OS lives under `.agents/`.
@@ -331,11 +315,11 @@ struct StaffDetailView: View {
     @ViewBuilder
     private func superiorMenu(_ detail: StaffDetail) -> some View {
         Button(L10n.clearSuperior) {
-            appModel.setStaffLead(of: detail.node.name, to: "", companyRoot: detail.companyRoot)
+            model.send(.clearLead(name: detail.node.name, companyRoot: detail.companyRoot))
         }
         ForEach(hopCandidates(detail).filter { $0.name != detail.lead }, id: \.id) { staff in
             Button(staff.name) {
-                appModel.setStaffLead(of: detail.node.name, to: staff.name, companyRoot: detail.companyRoot)
+                model.send(.setLead(name: detail.node.name, lead: staff.name, companyRoot: detail.companyRoot))
             }
         }
     }
@@ -345,7 +329,7 @@ struct StaffDetailView: View {
         let reporting = Set(detail.reports.map(\.name))
         ForEach(hopCandidates(detail).filter { !reporting.contains($0.name) }, id: \.id) { staff in
             Button(L10n.addReport(staff.name)) {
-                appModel.setStaffLead(of: staff.name, to: detail.node.name, companyRoot: detail.companyRoot)
+                model.send(.setLead(name: staff.name, lead: detail.node.name, companyRoot: detail.companyRoot))
             }
         }
     }
@@ -383,7 +367,7 @@ struct StaffDetailView: View {
                     }
                 if let lead = detail.lead, !lead.isEmpty {
                     Button {
-                        appModel.openStaffNamed(lead)
+                        model.send(.openNamed(lead))
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "person.fill")
@@ -408,7 +392,7 @@ struct StaffDetailView: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 200, alignment: .leading)
                     Button {
-                        appModel.openStaffNamed(realLead)
+                        model.send(.openNamed(realLead))
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "person.fill")
@@ -451,7 +435,7 @@ struct StaffDetailView: View {
                     VStack(spacing: 0) {
                         ForEach(detail.reports) { report in
                             Button {
-                                appModel.openStaff(report, inHolding: appModel.openCompany == nil)
+                                model.send(.openStaff(report, inHolding: appModel.openCompany == nil))
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "person.fill")
@@ -476,11 +460,7 @@ struct StaffDetailView: View {
                                 Button(L10n.removeReport, role: .destructive) {
                                     let fallback = detail.lead ?? ""
                                     let next = fallback == report.name ? "" : fallback
-                                    appModel.setStaffLead(
-                                        of: report.name,
-                                        to: next,
-                                        companyRoot: detail.companyRoot
-                                    )
+                                    model.send(.setLead(name: report.name, lead: next, companyRoot: detail.companyRoot))
                                 }
                             }
                             if report.id != detail.reports.last?.id {
@@ -545,7 +525,7 @@ struct StaffDetailView: View {
                     fenceRow(path, destructive: false) {
                         var next = detail.allowedPaths
                         next.removeAll { $0 == path }
-                        appModel.setPathFence(file: detail.sourceFile, allowed: next, denied: detail.deniedHints)
+                        model.send(.setFence(file: detail.sourceFile, allowed: next, denied: detail.deniedHints))
                     }
                 }
 
@@ -557,7 +537,7 @@ struct StaffDetailView: View {
                     fenceRow(path, destructive: true) {
                         var next = detail.deniedHints
                         next.removeAll { $0 == path }
-                        appModel.setPathFence(file: detail.sourceFile, allowed: detail.allowedPaths, denied: next)
+                        model.send(.setFence(file: detail.sourceFile, allowed: detail.allowedPaths, denied: next))
                     }
                 }
             }
@@ -627,7 +607,7 @@ struct StaffDetailView: View {
             denied.append(path)
         }
         fenceTarget = nil
-        appModel.setPathFence(file: file, allowed: allowed, denied: denied)
+        model.send(.setFence(file: file, allowed: allowed, denied: denied))
     }
 
     /// Prefer a path relative to the company project. Keep an absolute path otherwise.
@@ -647,19 +627,19 @@ struct StaffDetailView: View {
     private func createAndOpen(_ detail: StaffDetail, _ make: () throws -> URL) {
         do {
             let url = try make()
-            appModel.refreshOpenStaff()
-            appModel.openCodeFile(CodeFileRef.make(url: url, relativeTo: detail.companyRoot))
+            model.send(.refresh)
+            model.send(.openCodeFile(CodeFileRef.make(url: url, relativeTo: detail.companyRoot)))
         } catch {
-            appModel.lastError = error.localizedDescription
+            model.send(.fail(error.localizedDescription))
         }
     }
 
     private func delete(_ file: CodeFileRef) {
         do {
             try CompanyFileActions.delete(file.path)
-            appModel.refreshOpenStaff()
+            model.send(.refresh)
         } catch {
-            appModel.lastError = error.localizedDescription
+            model.send(.fail(error.localizedDescription))
         }
     }
 

@@ -4,9 +4,11 @@ import SwiftUI
 
 /// Opens a plan or script for editing.
 struct CodeFileDetailView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = CodeFileScreenModel()
 
     var body: some View {
+        let _ = model.attach(appModel)
         Group {
             if let file = appModel.openCodeFile {
                 EditableTextFileView(
@@ -14,7 +16,7 @@ struct CodeFileDetailView: View {
                     title: file.fileName,
                     subtitle: file.label,
                     badge: file.languageHint,
-                    onBack: { appModel.backFromCodeFile() }
+                    onBack: { model.send(.back) }
                 )
             } else {
                 ContentUnavailableView(L10n.fileNotFound, systemImage: "doc.questionmark")

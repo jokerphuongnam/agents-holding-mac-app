@@ -2,7 +2,8 @@ import Charts
 import SwiftUI
 
 struct UsageView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = UsageScreenModel()
 
     @State private var worktreeSelection: String = "" // "" = all worktrees (sum)
     /// Ticked models shown as rows (Sum always first). Empty until first load.
@@ -24,6 +25,7 @@ struct UsageView: View {
     private let chartAnimation = Animation.easeOut(duration: 0.85)
 
     var body: some View {
+        let _ = model.attach(appModel)
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -44,7 +46,7 @@ struct UsageView: View {
         .navigationTitle(usageTitle)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.back) { appModel.backFromUsage() }
+                Button(L10n.back) { model.send(.back) }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button(L10n.reload) { reloadRaw() }

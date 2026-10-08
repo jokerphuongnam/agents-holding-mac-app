@@ -16,13 +16,15 @@ private enum CompanyRosterTab: String, CaseIterable, Identifiable {
 }
 
 struct CompanyCanvasView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = CompanyScreenModel()
     @State private var rosterTab: CompanyRosterTab = .tree
     @State private var nameDraft = ""
     @State private var editingName = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
+        let _ = model.attach(appModel)
         Group {
             if let snap = appModel.openCompany {
                 ScrollViewReader { proxy in
@@ -46,7 +48,7 @@ struct CompanyCanvasView: View {
                                     scrollProxy: proxy,
                                     companyRoot: snap.companyRoot
                                 ) { staff in
-                                    appModel.openStaff(staff, inHolding: false)
+                                    model.send(.openStaff(staff))
                                 }
                             case .list:
                                 teamsSection(snap)
@@ -58,16 +60,16 @@ struct CompanyCanvasView: View {
                     }
                 }
                 .navigationTitle(snap.node.displayName)
-                .onAppear { appModel.refreshOpenCompany() }
+                .onAppear { model.send(.refresh) }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(appModel.companyStack.count > 1 ? L10n.parent : L10n.holding) {
-                            appModel.backOneCompany()
+                            model.send(.back)
                         }
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            appModel.openUsageCompany()
+                            model.send(.openUsage)
                         } label: {
                             Label(L10n.usage, systemImage: "chart.bar.xaxis")
                         }
@@ -94,7 +96,7 @@ struct CompanyCanvasView: View {
             nameDraft = snap.node.displayName
             return
         }
-        appModel.renameOpenCompany(to: trimmed)
+        model.send(.rename(trimmed))
         editingName = false
     }
 
@@ -168,9 +170,10 @@ struct CompanyCanvasView: View {
                     TeamBlock(
                         team: team,
                         reportCounts: counts,
-                        companyRoot: snap.companyRoot
+                        companyRoot: snap.companyRoot,
+                        model: model
                     ) { staff in
-                        appModel.openStaff(staff, inHolding: false)
+                        model.send(.openStaff(staff))
                     }
                 }
             }
@@ -186,13 +189,11 @@ struct CompanyCanvasView: View {
                 files: snap.skills,
                 emptyText: ""
             ) { file in
-                appModel.openSkill(
-                    SkillRef(
-                        skillID: file.path.deletingLastPathComponent().lastPathComponent,
-                        title: file.fileName,
-                        path: file.path
-                    )
-                )
+                model.send(.openSkill(SkillRef(
+                    skillID: file.path.deletingLastPathComponent().lastPathComponent,
+                    title: file.fileName,
+                    path: file.path
+                )))
             }
         }
         FileListSection(
@@ -201,7 +202,7 @@ struct CompanyCanvasView: View {
             files: snap.scripts,
             emptyText: L10n.companyScriptsEmpty
         ) { file in
-            appModel.openCodeFile(file)
+            model.send(.openCodeFile(file))
         }
     }
 
@@ -218,7 +219,7 @@ struct CompanyCanvasView: View {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(snap.children) { child in
                         CompanyCard(company: child) {
-                            appModel.openCompanyNode(child)
+                            model.send(.openChild(child))
                         }
                     }
                 }
@@ -229,10 +230,11 @@ struct CompanyCanvasView: View {
 }
 
 struct TeamBlock: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     let team: TeamNode
     var reportCounts: [String: Int] = [:]
     var companyRoot: URL? = nil
+    var model: CompanyScreenModel
     let onStaff: (StaffNode) -> Void
 
     @State private var newName = ""
@@ -267,7 +269,7 @@ struct TeamBlock: View {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(team.staffs) { staff in
                         StaffCard(staff: staff, reportCount: reportCounts[staff.name] ?? 0, onDelete: companyRoot.map { root in
-                            { appModel.removeStaff(staff, companyRoot: root) }
+                            { model.send(.removeStaff(staff, root)) }
                         }) {
                             onStaff(staff)
                         }
@@ -283,6 +285,7 @@ struct TeamBlock: View {
                         team: child,
                         reportCounts: reportCounts,
                         companyRoot: companyRoot,
+                        model: model,
                         onStaff: onStaff
                     )
                 }
@@ -297,7 +300,7 @@ struct TeamBlock: View {
                 let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
                 newName = ""
                 guard let companyRoot, !name.isEmpty else { return }
-                appModel.addStaff(name: name, team: team.id, companyRoot: companyRoot)
+                model.send(.addStaff(name: name, team: team.id, companyRoot: companyRoot))
             }
             Button(L10n.cancel, role: .cancel) { newName = "" }
         }

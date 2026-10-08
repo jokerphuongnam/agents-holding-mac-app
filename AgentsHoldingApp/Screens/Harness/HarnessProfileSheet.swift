@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct HarnessProfileSheet: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = HarnessScreenModel()
     @Environment(\.dismiss) private var dismiss
 
     @State private var tier = "medium"
@@ -19,6 +20,7 @@ struct HarnessProfileSheet: View {
     private var vendors: [String] { modes.map(\.mode).filter { $0 != "merge" } }
 
     var body: some View {
+        let _ = model.attach(appModel)
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -99,19 +101,19 @@ struct HarnessProfileSheet: View {
         .onChange(of: tier) { _, newValue in
             guard let detail, newValue != diskTier else { return }
             diskTier = newValue
-            appModel.setStaffTier(newValue, staffFile: detail.sourceFile, name: detail.node.name, companyRoot: detail.companyRoot)
+            model.send(.setTier(newValue, staffFile: detail.sourceFile, name: detail.node.name, companyRoot: detail.companyRoot))
             reload(fromDisk: false)
         }
         .onChange(of: routerEnabled) { _, newValue in
             guard let detail, newValue != diskRouter else { return }
             diskRouter = newValue
-            appModel.setHarnessRouter(enabled: newValue, companyRoot: detail.companyRoot)
+            model.send(.setRouter(newValue, detail.companyRoot))
             reload(fromDisk: false)
         }
         .onChange(of: mergeRuntime) { _, newValue in
             guard let detail, newValue != diskRuntime else { return }
             diskRuntime = newValue
-            appModel.setStaffRuntime(newValue, staff: detail.node.name, companyRoot: detail.companyRoot)
+            model.send(.setRuntime(newValue, staff: detail.node.name, companyRoot: detail.companyRoot))
             reload(fromDisk: false)
         }
     }
@@ -174,26 +176,26 @@ struct HarnessProfileSheet: View {
 
     private func saveMapping(_ mode: String) {
         guard let detail, mode != "merge" else { return }
-        appModel.setHarnessTier(
+        model.send(.setMapping(
             runtime: mode,
             tier: tier,
             model: models[mode] ?? "",
             effort: efforts[mode] ?? "",
             companyRoot: detail.companyRoot
-        )
+        ))
         reload(fromDisk: false)
     }
 
     private func saveModels() {
         guard let detail else { return }
         for mode in vendors {
-            appModel.setHarnessTier(
+            model.send(.setMapping(
                 runtime: mode,
                 tier: tier,
                 model: models[mode] ?? "",
                 effort: efforts[mode] ?? "",
                 companyRoot: detail.companyRoot
-            )
+            ))
         }
     }
 

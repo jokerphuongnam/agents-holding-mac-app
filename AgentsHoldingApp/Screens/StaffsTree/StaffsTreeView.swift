@@ -17,8 +17,9 @@ struct StaffsTreeView: View {
     var scrollProxy: ScrollViewProxy? = nil
     var companyRoot: URL? = nil
     let onSelect: (StaffNode) -> Void
-    @EnvironmentObject private var appModel: AppModel
-    @StateObject private var zoomState = OrgGraphZoomState()
+    @Environment(AppModel.self) private var appModel
+    @State private var model = StaffsTreeScreenModel()
+    @State private var zoomState = OrgGraphZoomState()
     @State private var newStaffName = ""
     @State private var newStaffTeam: String?
     @State private var pendingDelete: StaffNode?
@@ -47,6 +48,7 @@ struct StaffsTreeView: View {
     }
 
     var body: some View {
+        let _ = model.attach(appModel)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 if showsHeading {
@@ -118,7 +120,7 @@ struct StaffsTreeView: View {
                     newStaffName = ""
                     newStaffTeam = nil
                     guard let companyRoot, let team, !name.isEmpty else { return }
-                    appModel.addStaff(name: name, team: team, companyRoot: companyRoot)
+                    model.send(.add(name: name, team: team, companyRoot: companyRoot))
                 }
                 Button(L10n.cancel, role: .cancel) {
                     newStaffName = ""
@@ -131,7 +133,7 @@ struct StaffsTreeView: View {
             )) {
                 Button(L10n.deleteStaff, role: .destructive) {
                     if let staff = pendingDelete, let companyRoot {
-                        appModel.removeStaff(staff, companyRoot: companyRoot)
+                        model.send(.remove(staff, companyRoot))
                     }
                     pendingDelete = nil
                 }
@@ -269,16 +271,17 @@ private struct LiveZoomTransform: Equatable {
 ///
 /// While the user is zooming: mutate `live` only (scaleEffect).
 /// When idle: bake into `layoutZoom` and regenerate the graph for sharp text.
-private final class OrgGraphZoomState: ObservableObject {
-    @Published var layoutZoom: CGFloat = 1.0
-    @Published var live = LiveZoomTransform()
-    @Published private(set) var isLiveZooming = false
+@Observable
+private final class OrgGraphZoomState {
+    var layoutZoom: CGFloat = 1.0
+    var live = LiveZoomTransform()
+    private(set) var isLiveZooming = false
     /// Hide the graph until the first CEO center, so reset does not flash the origin frame.
-    @Published var contentVisible = false
+    var contentVisible = false
     /// Pan or zoom. Initial centering stops once the user moves the graph.
     private(set) var userAdjusted = false
     /// Bumped by the recenter button. The scroll view performs the move.
-    @Published var recenterToken = 0
+    var recenterToken = 0
     var didInitialCenter = false
 
     let viewportBridge = ViewportBridge()

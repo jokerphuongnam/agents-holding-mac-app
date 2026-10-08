@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct RootView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
+    @State private var model = RootScreenModel()
 
     var body: some View {
+        let _ = model.attach(appModel)
         NavigationSplitView {
-            SidebarView()
+            SidebarView(model: model)
         } detail: {
             detail
         }
@@ -36,8 +38,9 @@ struct RootView: View {
 }
 
 struct SidebarView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     @EnvironmentObject private var languageStore: LanguageStore
+    var model: RootScreenModel
 
     var body: some View {
         List {
@@ -51,8 +54,8 @@ struct SidebarView: View {
                 .pickerStyle(.menu)
             }
             Section(L10n.navigate) {
-                Button(L10n.holding) { appModel.backToHolding() }
-                Button(L10n.usage) { appModel.openUsageHolding() }
+                Button(L10n.holding) { model.send(.backToHolding) }
+                Button(L10n.usage) { model.send(.openUsage) }
             }
             Section(L10n.actions) {
                 Text(L10n.addCompanyHint)
@@ -64,14 +67,14 @@ struct SidebarView: View {
                 Section(L10n.companies) {
                     ForEach(holding.companies) { company in
                         Button(company.displayName) {
-                            appModel.openCompanyNode(company)
+                            model.send(.openCompany(company))
                         }
                     }
                 }
                 Section(L10n.holdingStaffsSection) {
                     ForEach(holding.teams) { team in
                         TeamSidebarGroup(team: team) { staff in
-                            appModel.openStaff(staff, inHolding: true)
+                            model.send(.openHoldingStaff(staff))
                         }
                     }
                 }
@@ -85,13 +88,13 @@ struct SidebarView: View {
                             .foregroundStyle(.secondary)
                         ForEach(snap.children) { child in
                             Button(child.displayName) {
-                                appModel.openCompanyNode(child)
+                                model.send(.openCompany(child))
                             }
                         }
                     }
                     ForEach(snap.teams) { team in
                         TeamSidebarGroup(team: team) { staff in
-                            appModel.openStaff(staff, inHolding: false)
+                            model.send(.openCompanyStaff(staff))
                         }
                     }
                 }
@@ -112,7 +115,7 @@ struct SidebarView: View {
                         .foregroundStyle(.red)
                         .lineLimit(3)
                 }
-                Button(L10n.reloadHolding) { appModel.reloadHolding() }
+                Button(L10n.reloadHolding) { model.send(.reload) }
                     .buttonStyle(.borderless)
             }
             .padding()
@@ -121,19 +124,4 @@ struct SidebarView: View {
     }
 }
 
-/// Sidebar team row, including nested `teams/<child>/`.
-private struct TeamSidebarGroup: View {
-    let team: TeamNode
-    let onStaff: (StaffNode) -> Void
 
-    var body: some View {
-        DisclosureGroup(team.name) {
-            ForEach(team.staffs) { staff in
-                Button(staff.name) { onStaff(staff) }
-            }
-            ForEach(team.childTeams) { child in
-                TeamSidebarGroup(team: child, onStaff: onStaff)
-            }
-        }
-    }
-}
