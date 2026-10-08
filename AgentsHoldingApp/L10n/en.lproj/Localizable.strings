@@ -65,6 +65,13 @@
 "staffs_tree_window_title" = "Staffs tree";
 "staffs_tree_recenter" = "Recenter graph";
 "company_plans" = "Plans";
+"edit" = "Edit";
+"plan_history" = "History";
+"plan_history_created" = "Created by %@";
+"plan_history_edited" = "Edited by %@";
+"save" = "Save";
+"saved" = "Saved";
+"save_failed" = "Could not save";
 "company_plans_empty" = "No plans in cache/plans yet";
 "company_scripts" = "Company scripts (install)";
 "company_scripts_empty" = "No company-wide install scripts";

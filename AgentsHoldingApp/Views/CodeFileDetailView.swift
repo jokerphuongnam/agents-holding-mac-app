@@ -1,80 +1,143 @@
-import HighlightSwift
+import MarkdownUI
 import SwiftUI
 
-/// Opens a script/source file with language-aware syntax highlighting.
+/// Opens a plan or script for editing.
 struct CodeFileDetailView: View {
     @EnvironmentObject private var appModel: AppModel
 
     var body: some View {
         Group {
-            if let file = appModel.openCodeFile,
-               let text = try? String(contentsOf: file.path, encoding: .utf8) {
-                ScrollView([.horizontal, .vertical]) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(file.label)
-                            .font(.title3.weight(.semibold))
-                        HStack(spacing: 8) {
-                            Text(file.languageHint)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(.quaternary, in: Capsule())
-                            Text(file.path.path)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
-                        Divider()
-                        CodeText(text)
-                            .highlightLanguage(highlightLanguage(for: file, source: text))
-                            .codeTextColors(.theme(.github))
-                            .font(.system(.body, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(24)
-                }
-                .navigationTitle(file.fileName)
+            if let file = appModel.openCodeFile {
+                EditableTextFileView(
+                    url: file.path,
+                    title: file.fileName,
+                    subtitle: file.label,
+                    badge: file.languageHint,
+                    onBack: { appModel.backFromCodeFile() }
+                )
             } else {
                 ContentUnavailableView(L10n.fileNotFound, systemImage: "doc.questionmark")
             }
         }
+    }
+}
+
+/// Read a company file, edit it, and write it back in place.
+struct EditableTextFileView: View {
+    let url: URL
+    let title: String
+    var subtitle: String = ""
+    var badge: String = ""
+    let onBack: () -> Void
+
+    @State private var text = ""
+    @State private var savedText = ""
+    @State private var loaded = false
+    @State private var missing = false
+    @State private var editing = false
+    @State private var status = ""
+
+    private var dirty: Bool { loaded && text != savedText }
+    private var isMarkdown: Bool { url.pathExtension.lowercased() == "md" }
+
+    var body: some View {
+        Group {
+            if missing {
+                ContentUnavailableView(L10n.fileNotFound, systemImage: "doc.questionmark")
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                    HStack(spacing: 8) {
+                        if !badge.isEmpty {
+                            Text(badge)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(.quaternary, in: Capsule())
+                        }
+                        Text(subtitle.isEmpty ? url.path : subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                        Spacer()
+                        if !status.isEmpty {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(status == L10n.saved ? Color.secondary : Color.red)
+                        }
+                    }
+                    if editing {
+                        TextEditor(text: $text)
+                            .font(.system(.body, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+                    } else if isMarkdown {
+                        ScrollView {
+                            Markdown(text)
+                                .markdownTheme(.gitHub)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else {
+                        ScrollView {
+                            Text(text)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+        .navigationTitle(title)
+        .onAppear(perform: load)
+        .onChange(of: url) { _, _ in load() }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.back) { appModel.backFromCodeFile() }
+                Button(L10n.back, action: onBack)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                if editing {
+                    Button(L10n.cancel) {
+                        text = savedText
+                        editing = false
+                        status = ""
+                    }
+                    Button(L10n.save, action: save)
+                        .disabled(!dirty)
+                } else {
+                    Button(L10n.edit) { editing = true }
+                        .disabled(!loaded)
+                }
             }
         }
     }
 
-    private func highlightLanguage(for file: CodeFileRef, source: String) -> HighlightLanguage {
-        var hint = file.languageHint
-        if hint == "plaintext" || hint.isEmpty {
-            if source.hasPrefix("#!") {
-                let first = source.prefix(80).lowercased()
-                if first.contains("python") { hint = "python" }
-                else if first.contains("bash") || first.contains("/sh") { hint = "bash" }
-                else if first.contains("ruby") { hint = "ruby" }
-                else if first.contains("node") { hint = "javascript" }
-            }
+    private func load() {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            missing = true
+            return
         }
-        switch hint {
-        case "python": return .python
-        case "bash", "shell", "sh", "zsh": return .bash
-        case "ruby": return .ruby
-        case "javascript": return .javaScript
-        case "typescript": return .typeScript
-        case "swift": return .swift
-        case "kotlin": return .kotlin
-        case "go": return .go
-        case "rust": return .rust
-        case "java": return .java
-        case "c": return .c
-        case "cpp": return .cPlusPlus
-        case "csharp": return .cSharp
-        case "json": return .json
-        case "yaml": return .yaml
-        case "markdown": return .markdown
-        case "toml": return .toml
-        default: return .plaintext
+        missing = false
+        text = raw
+        savedText = raw
+        loaded = true
+        editing = false
+        status = ""
+    }
+
+    private func save() {
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            savedText = text
+            editing = false
+            status = L10n.saved
+        } catch {
+            status = L10n.saveFailed
         }
     }
 }

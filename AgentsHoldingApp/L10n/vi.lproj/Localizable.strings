@@ -65,6 +65,13 @@
 "staffs_tree_window_title" = "Staffs tree";
 "staffs_tree_recenter" = "Căn lại graph";
 "company_plans" = "Plans";
+"edit" = "Chỉnh sửa";
+"plan_history" = "Lịch sử";
+"plan_history_created" = "Tạo bởi %@";
+"plan_history_edited" = "Sửa bởi %@";
+"save" = "Lưu";
+"saved" = "Đã lưu";
+"save_failed" = "Không lưu được";
 "company_plans_empty" = "Chưa có plan trong cache/plans";
 "company_scripts" = "Scripts company (install)";
 "company_scripts_empty" = "Không có script install cấp company";
