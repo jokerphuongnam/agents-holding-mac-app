@@ -90,10 +90,9 @@ struct HoldingDiscovery {
 
         var companies = loadCompaniesFromRegistry(holdingPackage: root)
 
-        // If registry empty, fall back to scan (discover on disk without requiring prior register).
-        if companies.isEmpty {
-            companies = loadCompaniesFromScan(holdingPackage: root)
-        }
+        // Extra folders the user picked in the app. No built-in path.
+        let picked = loadCompaniesFromSavedRoots(holdingPackage: root)
+        companies = mergeCompanies(companies, picked)
 
         // Holding itself usually has no children/; keep merge for edge layouts.
         let diskChildren = loadCompaniesFromChildrenDir(root.appendingPathComponent("children"))
@@ -125,11 +124,46 @@ struct HoldingDiscovery {
         return parseRegistryListTSV(output)
     }
 
-    private func loadCompaniesFromScan(holdingPackage: URL) -> [CompanyNode] {
+    private static let scanRootsKey = "companyScanRootBookmarks"
+
+    /// Remember a folder the user chose and return it. Does not scan other folders.
+    func rememberScanRoot(_ url: URL) {
+        let data = try? url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        guard let data else { return }
+        var blobs = UserDefaults.standard.array(forKey: Self.scanRootsKey) as? [Data] ?? []
+        blobs.append(data)
+        UserDefaults.standard.set(blobs, forKey: Self.scanRootsKey)
+    }
+
+    private func loadCompaniesFromSavedRoots(holdingPackage: URL) -> [CompanyNode] {
+        let blobs = UserDefaults.standard.array(forKey: Self.scanRootsKey) as? [Data] ?? []
+        var found: [CompanyNode] = []
+        for data in blobs {
+            var stale = false
+            guard let url = try? URL(
+                resolvingBookmarkData: data,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &stale
+            ) else { continue }
+            let started = url.startAccessingSecurityScopedResource()
+            defer { if started { url.stopAccessingSecurityScopedResource() } }
+            found.append(contentsOf: loadCompaniesFromScan(holdingPackage: holdingPackage, root: url))
+        }
+        var seen = Set<String>()
+        return found.filter { seen.insert(publicIdentityKey($0)).inserted }
+    }
+
+    private func loadCompaniesFromScan(holdingPackage: URL, root: URL) -> [CompanyNode] {
         guard let script = companyRegistryScript(holdingPackage: holdingPackage) else { return [] }
-        // No --root: company_registry.py scans Documents, Desktop, Projects, … (depth 6).
-        // Hard-coded Language/Agents roots missed companies under Documents/Code.
-        guard let output = runPython(script, arguments: ["scan"]) else { return [] }
+        guard let output = runPython(
+            script,
+            arguments: ["scan", "--root", root.path, "--max-depth", "8"]
+        ) else { return [] }
         var found: [CompanyNode] = []
         var seen = Set<String>()
         for company in parseScanTSV(output) {

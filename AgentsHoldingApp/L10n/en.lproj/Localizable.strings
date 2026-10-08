@@ -31,7 +31,9 @@
 "add_company" = "Add company";
 "add_company_help" = "Choose a folder to install or register a company";
 "holding_stats" = "%d companies · %d teams · %d staff";
-"holding_companies_empty" = "No companies yet — tap Add to choose a folder and install.";
+"holding_companies_empty" = "No companies yet. Choose a folder to scan, or Add to install one.";
+"scan_folder" = "Choose folder";
+"scan_folder_help" = "Scan only this folder for companies. Other folders are not opened.";
 "holding_staffs" = "Holding staffs";
 "holding_staffs_empty" = "No holding staffs under system/staffs";
 "holding_not_found" = "Holding not found";

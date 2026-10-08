@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -24,6 +25,19 @@ final class AppModel: ObservableObject {
     private let staffDirectory = StaffDirectory()
 
     init() {
+        reloadHolding()
+    }
+
+    /// Ask for one folder, then scan only that folder for companies.
+    func chooseCompanyScanFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = L10n.choose
+        panel.message = L10n.scanFolderHelp
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        holdingDiscovery.rememberScanRoot(url)
         reloadHolding()
     }
 

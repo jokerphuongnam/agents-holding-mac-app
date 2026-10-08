@@ -87,6 +87,13 @@ struct HoldingCanvasView: View {
                     .font(.headline)
                 Spacer()
                 Button {
+                    appModel.chooseCompanyScanFolder()
+                } label: {
+                    Label(L10n.scanFolder, systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.scanFolderHelp)
+                Button {
                     showAddCompany = true
                 } label: {
                     Label(L10n.add, systemImage: "plus.circle.fill")

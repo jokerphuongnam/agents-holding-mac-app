@@ -31,7 +31,9 @@
 "add_company" = "Thêm company";
 "add_company_help" = "Chọn folder để cài hoặc đăng ký company";
 "holding_stats" = "%d companies · %d teams · %d staff";
-"holding_companies_empty" = "Chưa có company — bấm Thêm để chọn folder và cài đặt.";
+"holding_companies_empty" = "Chưa có company. Chọn một folder để quét, hoặc Thêm để cài company.";
+"scan_folder" = "Chọn folder";
+"scan_folder_help" = "Chỉ quét folder này để tìm company. Các folder khác không bị mở.";
 "holding_staffs" = "Nhân sự holding";
 "holding_staffs_empty" = "Không có staff holding dưới system/staffs";
 "holding_not_found" = "Không tìm thấy holding";
