@@ -15,7 +15,7 @@ struct HoldingCanvasView: View {
                 )
             } else if let holding = appModel.holding {
                 ScrollViewReader { proxy in
-                    ScrollView([.horizontal, .vertical]) {
+                    ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             header(holding)
                             companiesSection(holding)

@@ -76,12 +76,13 @@ struct StaffsTreeView: View {
     }
 
     private var graphViewport: some View {
-        ScrollViewReader { proxy in
-            ScrollView([.horizontal, .vertical]) {
-                graphContent
-                    .scaleEffect(zoomState.live.rubber, anchor: .top)
-            }
-            .frame(height: fixedGraphHeight)
+        GeometryReader { geo in
+            ScrollViewReader { proxy in
+                ScrollView([.horizontal, .vertical]) {
+                    graphContent
+                        .scaleEffect(zoomState.live.rubber, anchor: .top)
+                }
+                .frame(width: geo.size.width, height: fixedGraphHeight)
             .background(ViewportHostView(bridge: zoomState.viewportBridge))
             .onAppear {
                 zoomState.installEventMonitors()
@@ -138,7 +139,10 @@ struct StaffsTreeView: View {
             } message: {
                 Text(L10n.deleteStaffConfirm(pendingDelete?.name ?? ""))
             }
+            }
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: fixedGraphHeight)
     }
 
     private var zoomToolbar: some View {

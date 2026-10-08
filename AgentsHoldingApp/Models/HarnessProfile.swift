@@ -15,5 +15,9 @@ struct StaffHarnessProfiles: Identifiable, Hashable {
     var id: String { "\(staffName)|\(tier)" }
     var staffName: String
     var tier: String
+    /// `runtime_router.toml` `enabled`. Merge uses one vendor until this is on.
+    var routerEnabled: Bool
+    /// Exact `[[roles]]` match for this staff, or the resolved runtime.
+    var mergeRuntime: String
     var modes: [HarnessModeProfile]
 }

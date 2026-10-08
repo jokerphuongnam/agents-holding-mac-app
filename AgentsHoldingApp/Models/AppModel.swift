@@ -139,6 +139,41 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func setStaffTier(_ tier: String, staffFile: URL, name: String, companyRoot: URL) {
+        do {
+            try CompanyFileActions.setTier(of: name, to: tier, staffFile: staffFile, companyRoot: companyRoot)
+            refreshOpenStaff()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func setHarnessRouter(enabled: Bool, companyRoot: URL) {
+        do {
+            try HarnessProfileService().setRouter(enabled: enabled, companyRoot: companyRoot)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func setStaffRuntime(_ runtime: String, staff: String, companyRoot: URL) {
+        do {
+            try HarnessProfileService().setStaffRuntime(runtime, staff: staff, companyRoot: companyRoot)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func setHarnessTier(runtime: String, tier: String, model: String, effort: String, companyRoot: URL) {
+        do {
+            try HarnessProfileService().setTierMapping(
+                runtime: runtime, tier: tier, model: model, effort: effort, companyRoot: companyRoot
+            )
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func setStaffLead(of name: String, to lead: String, companyRoot: URL) {
         do {
             try CompanyFileActions.setLead(of: name, to: lead, companyRoot: companyRoot)

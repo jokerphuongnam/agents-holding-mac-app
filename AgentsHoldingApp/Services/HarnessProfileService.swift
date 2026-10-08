@@ -37,7 +37,74 @@ struct HarnessProfileService {
                 )
             }
         }
-        return StaffHarnessProfiles(staffName: name, tier: effectiveTier, modes: rows)
+        let assigned = router.roles.first { $0.pattern == name }?.runtime
+        return StaffHarnessProfiles(
+            staffName: name,
+            tier: effectiveTier,
+            routerEnabled: router.enabled,
+            mergeRuntime: assigned ?? router.defaultRuntime,
+            modes: rows
+        )
+    }
+
+    static let tiers = ["dispatch", "low", "medium", "high", "xhigh"]
+    static let efforts = ["low", "medium", "high", "xhigh"]
+
+    func setRouter(enabled: Bool, companyRoot: URL) throws {
+        let url = companyRoot.appendingPathComponent("system/harness/runtime_router.toml")
+        var text = try String(contentsOf: url, encoding: .utf8)
+        let replacement = "enabled = \(enabled ? "true" : "false")"
+        if let range = text.range(of: #"(?m)^enabled\s*=\s*(true|false)\s*$"#, options: .regularExpression) {
+            text.replaceSubrange(range, with: replacement)
+        } else {
+            text = replacement + "\n" + text
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Exact `[[roles]]` for this staff, inserted before glob rules so it wins.
+    func setStaffRuntime(_ runtime: String, staff: String, companyRoot: URL) throws {
+        let url = companyRoot.appendingPathComponent("system/harness/runtime_router.toml")
+        var text = try String(contentsOf: url, encoding: .utf8)
+        let parts = text.components(separatedBy: "[[roles]]")
+        if parts.count == 1 {
+            if !text.hasSuffix("\n") { text += "\n" }
+            text += "\n[[roles]]\nmatch = \"\(staff)\"\nruntime = \"\(runtime)\"\n"
+        } else {
+            var found = false
+            var blocks = [parts[0]]
+            for block in parts.dropFirst() {
+                if inlineValue(in: block, key: "match") == staff {
+                    blocks.append(replaceKey(in: block, key: "runtime", value: runtime))
+                    found = true
+                } else {
+                    blocks.append(block)
+                }
+            }
+            text = blocks.joined(separator: "[[roles]]")
+            if !found {
+                let block = "[[roles]]\nmatch = \"\(staff)\"\nruntime = \"\(runtime)\"\n\n"
+                if let at = text.range(of: "[[roles]]") {
+                    text.insert(contentsOf: block, at: at.lowerBound)
+                } else {
+                    text += "\n" + block
+                }
+            }
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Model and effort for one tier on one vendor. Shared by every staff on that tier.
+    func setTierMapping(runtime: String, tier: String, model: String, effort: String, companyRoot: URL) throws {
+        let url = companyRoot.appendingPathComponent("system/harness/\(runtime).toml")
+        var text = try String(contentsOf: url, encoding: .utf8)
+        if !model.isEmpty {
+            text = setSectionKey(in: text, section: "tier_to_model", key: tier, value: model)
+        }
+        if !effort.isEmpty {
+            text = setSectionKey(in: text, section: "tier_to_effort", key: tier, value: effort)
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func mergeProfile(
@@ -190,6 +257,48 @@ struct HarnessProfileService {
             if !v.isEmpty { return v }
         }
         return nil
+    }
+
+    private func replaceKey(in block: String, key: String, value: String) -> String {
+        var lines = block.components(separatedBy: "\n")
+        var replaced = false
+        for index in lines.indices {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix(key),
+                  let eq = trimmed.firstIndex(of: "="),
+                  trimmed[..<eq].trimmingCharacters(in: .whitespaces) == key
+            else { continue }
+            lines[index] = "\(key) = \"\(value)\""
+            replaced = true
+            break
+        }
+        if !replaced { lines.append("\(key) = \"\(value)\"") }
+        return lines.joined(separator: "\n")
+    }
+
+    private func setSectionKey(in text: String, section: String, key: String, value: String) -> String {
+        let marker = "[\(section)]"
+        guard let header = text.range(of: marker) else {
+            var copy = text
+            if !copy.hasSuffix("\n") { copy += "\n" }
+            copy += "\n\(marker)\n\(key) = \"\(value)\"\n"
+            return copy
+        }
+        let bodyStart = header.upperBound
+        let rest = text[bodyStart...]
+        let pattern = #"\n\[[^\]]+\]"#
+        let bodyEnd: String.Index
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: String(rest), range: NSRange(location: 0, length: (rest as NSString).length)) {
+            bodyEnd = rest.index(rest.startIndex, offsetBy: match.range.location)
+        } else {
+            bodyEnd = text.endIndex
+        }
+        var body = String(text[bodyStart..<bodyEnd])
+        body = replaceKey(in: body, key: key, value: value)
+        var copy = text
+        copy.replaceSubrange(bodyStart..<bodyEnd, with: body)
+        return copy
     }
 
     private func boolValue(in text: String, key: String) -> Bool? {

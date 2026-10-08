@@ -23,7 +23,7 @@ struct CompanyCanvasView: View {
         Group {
             if let snap = appModel.openCompany {
                 ScrollViewReader { proxy in
-                    ScrollView([.horizontal, .vertical]) {
+                    ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             header(snap)
                             childrenSection(snap)

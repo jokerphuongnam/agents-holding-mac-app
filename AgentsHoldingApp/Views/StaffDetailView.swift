@@ -162,8 +162,8 @@ struct StaffDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .navigationTitle(detail.node.name)
-                .sheet(item: $harnessProfiles) { profiles in
-                    HarnessProfileSheet(profiles: profiles)
+                .sheet(item: $harnessProfiles) { _ in
+                    HarnessProfileSheet()
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

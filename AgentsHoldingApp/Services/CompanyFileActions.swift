@@ -100,6 +100,11 @@ enum CompanyFileActions {
         return start..<end
     }
 
+    static func setTier(of name: String, to tier: String, staffFile: URL, companyRoot: URL) throws {
+        try updateAgentColumn(name: name, column: "tier", value: tier, companyRoot: companyRoot)
+        try setFrontmatter(staffFile, key: "tier", value: tier)
+    }
+
     static func setLead(of name: String, to lead: String, companyRoot: URL) throws {
         try updateAgentLead(name: name, lead: lead, companyRoot: companyRoot)
         try removeRosterChild(name, companyRoot: companyRoot)
@@ -147,18 +152,22 @@ enum CompanyFileActions {
     }
 
     private static func updateAgentLead(name: String, lead: String, companyRoot: URL) throws {
+        try updateAgentColumn(name: name, column: "lead", value: lead, companyRoot: companyRoot)
+    }
+
+    private static func updateAgentColumn(name: String, column: String, value: String, companyRoot: URL) throws {
         let url = hopData(companyRoot, "agents.tsv")
         var lines = (try? String(contentsOf: url, encoding: .utf8))?
             .components(separatedBy: .newlines) ?? []
         guard let header = lines.first else { return }
         let keys = header.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-        guard let leadIndex = keys.firstIndex(of: "lead") else { return }
+        guard let columnIndex = keys.firstIndex(of: column) else { return }
         var found = false
         for index in lines.indices where index > 0 {
             var cols = lines[index].split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             guard cols.first == name else { continue }
             while cols.count < keys.count { cols.append("") }
-            cols[leadIndex] = lead
+            cols[columnIndex] = value
             lines[index] = cols.joined(separator: "\t")
             found = true
             break
@@ -166,10 +175,31 @@ enum CompanyFileActions {
         if !found {
             var cols = Array(repeating: "", count: keys.count)
             if let nameIndex = keys.firstIndex(of: "name") { cols[nameIndex] = name }
-            cols[leadIndex] = lead
+            cols[columnIndex] = value
             lines.append(cols.joined(separator: "\t"))
         }
         try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func setFrontmatter(_ file: URL, key: String, value: String) throws {
+        var text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        var lines = text.components(separatedBy: "\n")
+        guard lines.first == "---" else { return }
+        var end = 1
+        while end < lines.count, lines[end] != "---" { end += 1 }
+        guard end < lines.count else { return }
+        var replaced = false
+        for index in 1..<end {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix(key + ":") {
+                lines[index] = "\(key): \(value)"
+                replaced = true
+                break
+            }
+        }
+        if !replaced { lines.insert("\(key): \(value)", at: end) }
+        text = lines.joined(separator: "\n")
+        try text.write(to: file, atomically: true, encoding: .utf8)
     }
 
     private static func removeRosterChild(_ name: String, companyRoot: URL) throws {
