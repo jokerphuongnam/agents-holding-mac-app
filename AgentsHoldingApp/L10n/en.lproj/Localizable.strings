@@ -68,6 +68,12 @@
 "staffs_tree_recenter" = "Recenter graph";
 "company_plans" = "Plans";
 "edit" = "Edit";
+"undo" = "Undo";
+"redo" = "Redo";
+"new_file" = "New file";
+"file_name" = "File name";
+"delete_file" = "Delete";
+"delete_file_confirm" = "Delete %@? This cannot be undone.";
 "plan_history" = "History";
 "plan_history_created" = "Created by %@";
 "plan_history_edited" = "Edited by %@";

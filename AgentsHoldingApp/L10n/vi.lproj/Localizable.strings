@@ -68,6 +68,12 @@
 "staffs_tree_recenter" = "Căn lại graph";
 "company_plans" = "Plans";
 "edit" = "Chỉnh sửa";
+"undo" = "Hoàn tác";
+"redo" = "Làm lại";
+"new_file" = "Tạo file";
+"file_name" = "Tên file";
+"delete_file" = "Xoá";
+"delete_file_confirm" = "Xoá %@? Không hoàn tác được.";
 "plan_history" = "Lịch sử";
 "plan_history_created" = "Tạo bởi %@";
 "plan_history_edited" = "Sửa bởi %@";

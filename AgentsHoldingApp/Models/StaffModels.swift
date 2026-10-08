@@ -94,6 +94,8 @@ struct StaffDetail: Hashable {
     var allowedPaths: [String]
     var deniedHints: [String]
     var bodyMarkdown: String
+    /// `system/staffs/…/<name>.md` for this staff.
+    var sourceFile: URL
     /// Company OS root used to resolve skills/scope (`…/*-company` or holding package).
     var companyRoot: URL
 }

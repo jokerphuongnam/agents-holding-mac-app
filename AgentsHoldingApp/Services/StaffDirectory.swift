@@ -111,6 +111,7 @@ struct StaffDirectory {
             allowedPaths: allowed,
             deniedHints: denied,
             bodyMarkdown: stripFrontmatter(body),
+            sourceFile: staffFile,
             companyRoot: companyRoot
         )
     }

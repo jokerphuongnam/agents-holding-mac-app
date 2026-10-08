@@ -121,6 +121,16 @@ final class AppModel: ObservableObject {
         selection = .staff(staff.id)
     }
 
+    func refreshOpenStaff() {
+        guard let detail = staffDetail else { return }
+        guard let updated = staffDirectory.loadStaffDetail(
+            name: detail.node.name,
+            team: detail.node.team,
+            companyRoot: detail.companyRoot
+        ) else { return }
+        staffDetail = updated
+    }
+
     /// Open staff by role name within the current company OS (or holding).
     func openStaffNamed(_ name: String) {
         let inHolding = openCompany == nil

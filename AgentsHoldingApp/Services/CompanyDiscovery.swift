@@ -16,7 +16,7 @@ struct CompanyDiscovery {
             )
         }
 
-        let children = loadChildren(parentCompanyPath: companyPath, holdingRoot: holdingRoot)
+        let children = loadChildren(parentCompanyPath: companyPath)
         let teams = staffDirectory.loadTeams(companyRoot: companyPath)
         let skills = assets.loadCompanyWideSkills(companyRoot: companyPath)
         let scripts = assets.loadCompanyWideScripts(companyRoot: companyPath)
@@ -52,51 +52,10 @@ struct CompanyDiscovery {
 
     // MARK: - Children
 
-    private func loadChildren(parentCompanyPath: URL, holdingRoot: URL?) -> [CompanyNode] {
-        // Under one parent, the same child often appears twice: children_registry row
-        // (id=hash) + children/<stem>/META.toml pointer (id=slug|root). Dedupe by
-        // company_path, then project_root, then slug — prefer registry.
-        let registry = loadChildrenFromRegistry(parentCompanyPath: parentCompanyPath, holdingRoot: holdingRoot)
-        let disk = loadChildrenFromDisk(parentCompanyPath: parentCompanyPath)
-        return dedupeChildren(registryFirst: registry, disk: disk)
-    }
-
-    private func dedupeChildren(registryFirst: [CompanyNode], disk: [CompanyNode]) -> [CompanyNode] {
-        var out: [CompanyNode] = []
-        var seenPath = Set<String>()
-        var seenSlug = Set<String>()
-
-        func absorb(_ child: CompanyNode) {
-            let pathKey = (child.companyPath?.path ?? child.projectRoot?.path ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !pathKey.isEmpty {
-                if seenPath.contains(pathKey) { return }
-                seenPath.insert(pathKey)
-                seenSlug.insert(child.slug)
-                out.append(child)
-                return
-            }
-            if seenSlug.contains(child.slug) { return }
-            seenSlug.insert(child.slug)
-            out.append(child)
-        }
-
-        for child in registryFirst { absorb(child) }
-        for child in disk { absorb(child) }
-
-        return out.sorted {
-            if $0.slug != $1.slug { return $0.slug < $1.slug }
-            return ($0.projectRoot?.path ?? "") < ($1.projectRoot?.path ?? "")
-        }
-    }
-
-    private func loadChildrenFromRegistry(parentCompanyPath: URL, holdingRoot: URL?) -> [CompanyNode] {
-        guard let script = childrenRegistryScript(holdingRoot: holdingRoot) else { return [] }
-        guard let output = runPython(
-            script,
-            arguments: ["--parent", parentCompanyPath.path, "list"]
-        ) else { return [] }
-        return parseChildrenListTSV(output)
+    private func loadChildren(parentCompanyPath: URL) -> [CompanyNode] {
+        // Read the children folder in-process. Spawning python3 here makes macOS
+        // ask Allow on every company open.
+        return loadChildrenFromDisk(parentCompanyPath: parentCompanyPath)
     }
 
     private func loadChildrenFromDisk(parentCompanyPath: URL) -> [CompanyNode] {
@@ -134,46 +93,6 @@ struct CompanyDiscovery {
         return out
     }
 
-    private func childrenRegistryScript(holdingRoot: URL?) -> URL? {
-        let candidates: [URL] = [
-            holdingRoot?.appendingPathComponent("holding/system/install/children_registry.py"),
-            holdingRoot?.appendingPathComponent("system/install/children_registry.py"),
-            URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Documents/Agents/agents-holding/holding/system/install/children_registry.py"),
-            URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent(".agents/holding/system/install/children_registry.py"),
-        ].compactMap { $0 }
-
-        return candidates.first { FileManager.default.isReadableFile(atPath: $0.path) }
-    }
-
-    /// children_registry `list` TSV (always prints cols/row when invoked).
-    private func parseChildrenListTSV(_ text: String) -> [CompanyNode] {
-        var out: [CompanyNode] = []
-        for line in text.split(whereSeparator: \.isNewline).map(String.init) {
-            let cols = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            guard cols.first == "row", cols.count >= 8 else { continue }
-            // row id slug status budget placement project_root company_path grants_path
-            let id = cols[1]
-            let slug = cols[2]
-            let status = cols[3]
-            let budget = cols[4]
-            let projectRoot = cols[6]
-            let companyPath = cols[7]
-            out.append(
-                CompanyNode(
-                    id: id,
-                    slug: slug,
-                    projectRoot: pathURL(projectRoot),
-                    companyPath: pathURL(companyPath),
-                    status: status,
-                    budget: budget
-                )
-            )
-        }
-        return out
-    }
-
     // MARK: - META / helpers
 
     private func parseCompanyPath(fromMETA meta: URL, key: String = "company_path") -> URL? {
@@ -203,23 +122,6 @@ struct CompanyDiscovery {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, t != "—" else { return nil }
         return URL(fileURLWithPath: (t as NSString).expandingTildeInPath)
-    }
-
-    private func runPython(_ script: URL, arguments: [String]) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [script.path] + arguments
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return nil
-        }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)
     }
 }
 

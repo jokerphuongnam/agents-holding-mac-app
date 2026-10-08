@@ -21,7 +21,17 @@ struct StaffDetailView: View {
                                 systemImage: "list.clipboard",
                                 files: detail.plans,
                                 emptyText: "",
-                                collapsed: true
+                                collapsed: true,
+                                onCreate: { name in
+                                    createAndOpen(detail) {
+                                        try CompanyFileActions.createPlan(
+                                            name: name,
+                                            owner: detail.node.name,
+                                            companyRoot: detail.companyRoot
+                                        )
+                                    }
+                                },
+                                onDelete: { delete($0) }
                             ) { file in
                                 appModel.openCodeFile(file)
                             }
@@ -32,7 +42,18 @@ struct StaffDetailView: View {
                             systemImage: "book",
                             files: detail.skillFiles,
                             emptyText: L10n.skillsEmpty(detail.node.team, detail.node.name),
-                            collapsed: true
+                            collapsed: true,
+                            onCreate: { name in
+                                createAndOpen(detail) {
+                                    try CompanyFileActions.createSkill(
+                                        name: name,
+                                        staff: detail.node.name,
+                                        team: detail.node.team,
+                                        companyRoot: detail.companyRoot
+                                    )
+                                }
+                            },
+                            onDelete: { delete($0) }
                         ) { file in
                             appModel.openSkill(
                                 SkillRef(
@@ -48,7 +69,19 @@ struct StaffDetailView: View {
                             systemImage: "terminal",
                             files: detail.scriptFiles,
                             emptyText: L10n.scriptsEmpty,
-                            collapsed: true
+                            collapsed: true,
+                            onCreate: { name in
+                                createAndOpen(detail) {
+                                    try CompanyFileActions.createScript(
+                                        name: name,
+                                        staff: detail.node.name,
+                                        team: detail.node.team,
+                                        companyRoot: detail.companyRoot,
+                                        hop: detail.node.name == "ceo"
+                                    )
+                                }
+                            },
+                            onDelete: { delete($0) }
                         ) { file in
                             appModel.openCodeFile(file)
                         }
@@ -294,15 +327,31 @@ struct StaffDetailView: View {
         .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func bodySection(_ detail: StaffDetail) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(L10n.staffBrief, systemImage: "doc.richtext")
-                .font(.headline)
-            Markdown(detail.bodyMarkdown)
-                .markdownTheme(.gitHub)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private func createAndOpen(_ detail: StaffDetail, _ make: () throws -> URL) {
+        do {
+            let url = try make()
+            appModel.refreshOpenStaff()
+            appModel.openCodeFile(CodeFileRef.make(url: url, relativeTo: detail.companyRoot))
+        } catch {
+            appModel.lastError = error.localizedDescription
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func delete(_ file: CodeFileRef) {
+        do {
+            try CompanyFileActions.delete(file.path)
+            appModel.refreshOpenStaff()
+        } catch {
+            appModel.lastError = error.localizedDescription
+        }
+    }
+
+    private func bodySection(_ detail: StaffDetail) -> some View {
+        EditableTextFileView(
+            url: detail.sourceFile,
+            title: L10n.staffBrief,
+            embedded: true,
+            onBack: {}
+        )
     }
 }

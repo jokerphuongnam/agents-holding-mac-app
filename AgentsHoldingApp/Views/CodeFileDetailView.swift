@@ -1,3 +1,4 @@
+import AppKit
 import MarkdownUI
 import SwiftUI
 
@@ -28,6 +29,8 @@ struct EditableTextFileView: View {
     let title: String
     var subtitle: String = ""
     var badge: String = ""
+    /// Staff page already has its own back button and scroll view.
+    var embedded: Bool = false
     let onBack: () -> Void
 
     @State private var text = ""
@@ -36,6 +39,11 @@ struct EditableTextFileView: View {
     @State private var missing = false
     @State private var editing = false
     @State private var status = ""
+    /// Each entry is one replacement. Undo puts `removed` back. Redo puts `inserted` back.
+    @State private var undoStack: [TextEdit] = []
+    @State private var redoStack: [TextEdit] = []
+    @State private var scrollIndex = 0
+    @State private var scrollToken = 0
 
     private var dirty: Bool { loaded && text != savedText }
     private var isMarkdown: Bool { url.pathExtension.lowercased() == "md" }
@@ -66,22 +74,26 @@ struct EditableTextFileView: View {
                                 .font(.caption)
                                 .foregroundStyle(status == L10n.saved ? Color.secondary : Color.red)
                         }
+                        editButtons
                     }
                     if editing {
-                        TextEditor(text: $text)
-                            .font(.system(.body, design: .monospaced))
-                            .scrollContentBackground(.hidden)
+                        HistoryTextEditor(text: $text, scrollIndex: scrollIndex, scrollToken: scrollToken) { edit in
+                            undoStack.append(edit)
+                            redoStack.removeAll()
+                        }
+                            .frame(minHeight: embedded ? 280 : 320)
+                            .frame(maxHeight: embedded ? 480 : .infinity)
                             .padding(8)
                             .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
                     } else if isMarkdown {
-                        ScrollView {
+                        preview {
                             Markdown(text)
                                 .markdownTheme(.gitHub)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
-                        ScrollView {
+                        preview {
                             Text(text)
                                 .font(.system(.body, design: .monospaced))
                                 .textSelection(.enabled)
@@ -89,31 +101,49 @@ struct EditableTextFileView: View {
                         }
                     }
                 }
-                .padding(24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(embedded ? 0 : 24)
+                .frame(maxWidth: .infinity, maxHeight: embedded ? nil : .infinity, alignment: .topLeading)
             }
         }
-        .navigationTitle(title)
         .onAppear(perform: load)
         .onChange(of: url) { _, _ in load() }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.back, action: onBack)
+        .modifier(EditorNavigationBar(embedded: embedded, title: title, onBack: onBack))
+    }
+
+    @ViewBuilder
+    private func preview<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if embedded {
+            content()
+        } else {
+            ScrollView { content() }
+        }
+    }
+
+    @ViewBuilder
+    private var editButtons: some View {
+        if editing {
+            Button(action: undo) {
+                Image(systemName: "arrow.uturn.backward")
             }
-            ToolbarItem(placement: .primaryAction) {
-                if editing {
-                    Button(L10n.cancel) {
-                        text = savedText
-                        editing = false
-                        status = ""
-                    }
-                    Button(L10n.save, action: save)
-                        .disabled(!dirty)
-                } else {
-                    Button(L10n.edit) { editing = true }
-                        .disabled(!loaded)
-                }
+            .help(L10n.undo)
+            .disabled(undoStack.isEmpty)
+            Button(action: redo) {
+                Image(systemName: "arrow.uturn.forward")
             }
+            .help(L10n.redo)
+            .disabled(redoStack.isEmpty)
+            Button(L10n.cancel) {
+                text = savedText
+                editing = false
+                status = ""
+                undoStack.removeAll()
+                redoStack.removeAll()
+            }
+            Button(L10n.save, action: save)
+                .disabled(!dirty)
+        } else {
+            Button(L10n.edit) { editing = true }
+                .disabled(!loaded)
         }
     }
 
@@ -128,6 +158,32 @@ struct EditableTextFileView: View {
         loaded = true
         editing = false
         status = ""
+        undoStack.removeAll()
+        redoStack.removeAll()
+    }
+
+    private func undo() {
+        guard let edit = undoStack.popLast() else { return }
+        guard let updated = edit.reverted(in: text) else { return }
+        redoStack.append(edit)
+        reveal(updated, at: edit.location)
+    }
+
+    private func redo() {
+        guard let edit = redoStack.popLast() else { return }
+        guard let updated = edit.applied(in: text) else { return }
+        undoStack.append(edit)
+        reveal(updated, at: edit.location)
+    }
+
+    private func reveal(_ updated: String, at index: Int) {
+        scrollIndex = index
+        scrollToken += 1
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            text = updated
+        }
     }
 
     private func save() {
@@ -142,6 +198,142 @@ struct EditableTextFileView: View {
     }
 }
 
+/// One user replacement. `location` is a UTF-16 index, matching `NSTextView` ranges.
+private struct TextEdit {
+    var location: Int
+    var removed: String
+    var inserted: String
+
+    func reverted(in source: String) -> String? {
+        replace(in: source, length: (inserted as NSString).length, with: removed)
+    }
+
+    func applied(in source: String) -> String? {
+        replace(in: source, length: (removed as NSString).length, with: inserted)
+    }
+
+    private func replace(in source: String, length: Int, with replacement: String) -> String? {
+        let ns = source as NSString
+        guard location >= 0, location + length <= ns.length else { return nil }
+        return ns.replacingCharacters(in: NSRange(location: location, length: length), with: replacement)
+    }
+}
+
+/// Stable bar: undo and redo stay out of it so those actions do not redraw the title.
+private struct EditorNavigationBar: ViewModifier {
+    var embedded: Bool
+    var title: String
+    var onBack: () -> Void
+
+    func body(content: Content) -> some View {
+        if embedded {
+            content
+        } else {
+            content
+                .navigationTitle(title)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L10n.back, action: onBack)
+                    }
+                }
+        }
+    }
+}
+
+/// Plain-text editor that can scroll to a character index after undo or redo.
+private struct HistoryTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    var scrollIndex: Int
+    var scrollToken: Int
+    /// Called only for a real keystroke or paste, with that one replacement.
+    var onUserEdit: (TextEdit) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        guard let textView = scroll.documentView as? NSTextView else { return scroll }
+        textView.delegate = context.coordinator
+        textView.isRichText = false
+        textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.drawsBackground = false
+        textView.allowsUndo = false
+        context.coordinator.ignoreChange = true
+        textView.string = text
+        context.coordinator.lastScrollToken = scrollToken
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let textView = scroll.documentView as? NSTextView else { return }
+        context.coordinator.parent = self
+        if textView.string != text {
+            // The change notice can arrive after this function returns.
+            // Keep ignoring until that notice, so undo is not stored as a new edit.
+            context.coordinator.ignoreChange = true
+            textView.string = text
+        }
+        guard context.coordinator.lastScrollToken != scrollToken else { return }
+        context.coordinator.lastScrollToken = scrollToken
+        let length = (text as NSString).length
+        let index = min(max(scrollIndex, 0), length)
+        let range = NSRange(location: index, length: 0)
+        textView.setSelectedRange(range)
+        textView.scrollRangeToVisible(range)
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: HistoryTextEditor
+        var lastScrollToken = 0
+        var ignoreChange = false
+        var pending: [TextEdit] = []
+
+        init(_ parent: HistoryTextEditor) {
+            self.parent = parent
+        }
+
+        func textView(
+            _ textView: NSTextView,
+            shouldChangeTextIn affectedCharRange: NSRange,
+            replacementString: String?
+        ) -> Bool {
+            if ignoreChange { return true }
+            let current = textView.string as NSString
+            guard affectedCharRange.location >= 0,
+                  NSMaxRange(affectedCharRange) <= current.length
+            else { return true }
+            pending.append(
+                TextEdit(
+                    location: affectedCharRange.location,
+                    removed: current.substring(with: affectedCharRange),
+                    inserted: replacementString ?? ""
+                )
+            )
+            return true
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            if ignoreChange {
+                ignoreChange = false
+                pending.removeAll()
+                return
+            }
+            let edits = pending
+            pending.removeAll()
+            for edit in edits {
+                parent.onUserEdit(edit)
+            }
+            parent.text = textView.string
+        }
+    }
+}
+
 struct FileListSection: View {
     let title: String
     let systemImage: String
@@ -149,9 +341,14 @@ struct FileListSection: View {
     let emptyText: String
     /// Staff detail lists start closed; company canvas stays open.
     var collapsed: Bool = false
+    var onCreate: ((String) -> Void)? = nil
+    var onDelete: ((CodeFileRef) -> Void)? = nil
     let onOpen: (CodeFileRef) -> Void
 
     @State private var expanded: Bool
+    @State private var newName = ""
+    @State private var showingNew = false
+    @State private var pendingDelete: CodeFileRef?
 
     init(
         title: String,
@@ -159,6 +356,8 @@ struct FileListSection: View {
         files: [CodeFileRef],
         emptyText: String,
         collapsed: Bool = false,
+        onCreate: ((String) -> Void)? = nil,
+        onDelete: ((CodeFileRef) -> Void)? = nil,
         onOpen: @escaping (CodeFileRef) -> Void
     ) {
         self.title = title
@@ -166,6 +365,8 @@ struct FileListSection: View {
         self.files = files
         self.emptyText = emptyText
         self.collapsed = collapsed
+        self.onCreate = onCreate
+        self.onDelete = onDelete
         self.onOpen = onOpen
         _expanded = State(initialValue: !collapsed)
     }
@@ -195,12 +396,41 @@ struct FileListSection: View {
             }
             .buttonStyle(.plain)
             .disabled(!collapsed)
+            .contextMenu {
+                if onCreate != nil {
+                    Button(L10n.newFile) { showingNew = true }
+                }
+            }
 
             if expanded {
                 fileRows
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .alert(L10n.newFile, isPresented: $showingNew) {
+            TextField(L10n.fileName, text: $newName)
+            Button(L10n.add) {
+                let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                newName = ""
+                guard !name.isEmpty else { return }
+                onCreate?(name)
+            }
+            Button(L10n.cancel, role: .cancel) { newName = "" }
+        }
+        .alert(L10n.deleteFile, isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )) {
+            Button(L10n.deleteFile, role: .destructive) {
+                if let file = pendingDelete {
+                    onDelete?(file)
+                }
+                pendingDelete = nil
+            }
+            Button(L10n.cancel, role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text(L10n.deleteFileConfirm(pendingDelete?.fileName ?? ""))
+        }
     }
 
     @ViewBuilder
@@ -241,6 +471,14 @@ struct FileListSection: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(L10n.edit) { onOpen(file) }
+                            if onDelete != nil {
+                                Button(L10n.deleteFile, role: .destructive) {
+                                    pendingDelete = file
+                                }
+                            }
+                        }
                         if file.id != files.last?.id {
                             Divider()
                         }
