@@ -66,6 +66,40 @@ enum CompanyFileActions {
     }
 
     /// Point `name` at `lead` in agents.tsv and roster.tsv. Empty lead removes the roster row.
+    /// Replace the `## Path fence` block in a staff file. Other sections stay as they are.
+    static func writePathFence(file: URL, allowed: [String], denied: [String]) throws {
+        var text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        let block = renderPathFence(allowed: allowed, denied: denied)
+        if let range = pathFenceRange(in: text) {
+            text.replaceSubrange(range, with: block)
+        } else {
+            if !text.hasSuffix("\n") { text += "\n" }
+            text += "\n" + block
+        }
+        try text.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    private static func renderPathFence(allowed: [String], denied: [String]) -> String {
+        var lines = ["## Path fence", "", "### allow_rw"]
+        lines.append(contentsOf: allowed.map { "- `\($0)`" })
+        lines.append("")
+        lines.append("### deny")
+        lines.append(contentsOf: denied.map { "- `\($0)`" })
+        lines.append("")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func pathFenceRange(in text: String) -> Range<String.Index>? {
+        let needle = "## Path fence"
+        guard let start = text.range(of: needle)?.lowerBound else { return nil }
+        var end = text.endIndex
+        let rest = text[start...].dropFirst(needle.count)
+        if let next = rest.range(of: "\n## ") {
+            end = next.lowerBound
+        }
+        return start..<end
+    }
+
     static func setLead(of name: String, to lead: String, companyRoot: URL) throws {
         try updateAgentLead(name: name, lead: lead, companyRoot: companyRoot)
         try removeRosterChild(name, companyRoot: companyRoot)

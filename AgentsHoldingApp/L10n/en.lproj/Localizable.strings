@@ -80,6 +80,11 @@
 "clear_superior" = "Clear superior";
 "add_report" = "Add report: %@";
 "remove_report" = "Remove from hop";
+"add_allowed" = "Add allowed path";
+"add_denied" = "Add denied path";
+"remove_path" = "Remove path";
+"path_placeholder" = "Path";
+"path_fence_drop" = "Drop a file or folder here, or click to browse.";
 "file_name" = "File name";
 "delete_file" = "Delete";
 "delete_file_confirm" = "Delete %@? This cannot be undone.";

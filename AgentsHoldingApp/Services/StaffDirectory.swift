@@ -269,6 +269,9 @@ struct StaffDirectory {
     }
 
     private func parsePathLimits(staffBody: String, team: String, companyRoot: URL) -> (allowed: [String], denied: [String]) {
+        if let fence = pathFenceBlock(in: staffBody) {
+            return parseFenceBlock(fence)
+        }
         var allowed: [String] = []
         var denied: [String] = []
 
@@ -337,6 +340,42 @@ struct StaffDirectory {
         }
 
         return (uniquePreserveOrder(allowed), uniquePreserveOrder(denied))
+    }
+
+    /// Staff-owned fence, written by the app. Stops at the next `## ` heading.
+    private func pathFenceBlock(in body: String) -> String? {
+        let lines = body.components(separatedBy: .newlines)
+        guard let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).lowercased() == "## path fence" }) else {
+            return nil
+        }
+        var end = lines.count
+        for index in lines.index(after: start)..<lines.count {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("## "), !trimmed.hasPrefix("### ") {
+                end = index
+                break
+            }
+        }
+        return lines[start..<end].joined(separator: "\n")
+    }
+
+    private func parseFenceBlock(_ block: String) -> (allowed: [String], denied: [String]) {
+        var allowed: [String] = []
+        var denied: [String] = []
+        var mode = ""
+        for line in block.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let lower = trimmed.lowercased()
+            if lower == "### allow_rw" { mode = "allow"; continue }
+            if lower == "### deny" { mode = "deny"; continue }
+            guard trimmed.hasPrefix("-"), mode == "allow" || mode == "deny" else { continue }
+            let value = trimmed
+                .trimmingCharacters(in: CharacterSet(charactersIn: "- "))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "`"))
+            guard !value.isEmpty else { continue }
+            if mode == "allow" { allowed.append(value) } else { denied.append(value) }
+        }
+        return (allowed, denied)
     }
 
     private func backtickPaths(in text: String) -> [String] {

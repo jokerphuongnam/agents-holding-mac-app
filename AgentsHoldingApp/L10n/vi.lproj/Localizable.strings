@@ -80,6 +80,11 @@
 "clear_superior" = "Bỏ cấp trên";
 "add_report" = "Thêm cấp dưới: %@";
 "remove_report" = "Gỡ khỏi hop";
+"add_allowed" = "Thêm path được phép";
+"add_denied" = "Thêm path cấm";
+"remove_path" = "Xoá path";
+"path_placeholder" = "Path";
+"path_fence_drop" = "Kéo file hoặc folder vào đây, hoặc bấm để chọn.";
 "file_name" = "Tên file";
 "delete_file" = "Xoá";
 "delete_file_confirm" = "Xoá %@? Không hoàn tác được.";

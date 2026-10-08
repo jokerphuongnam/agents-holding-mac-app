@@ -1,11 +1,78 @@
+import AppKit
 import MarkdownUI
 import SwiftUI
+import UniformTypeIdentifiers
+
+private enum FenceKind {
+    case allow
+    case deny
+}
+
+private struct PathFencePicker: View {
+    let title: String
+    let onPick: (URL) -> Void
+    let onCancel: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title)
+                .font(.headline)
+            dropZone
+            HStack {
+                Spacer()
+                Button(L10n.cancel, action: onCancel)
+                Button(L10n.choose) { browse() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    private var dropZone: some View {
+        Text(L10n.pathFenceDrop)
+            .font(.callout)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 140)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(hovering ? Color.accentColor : Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { browse() }
+            .onDrop(of: [.fileURL], isTargeted: $hovering) { providers in
+                guard let provider = providers.first else { return false }
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    DispatchQueue.main.async { onPick(url) }
+                }
+                return true
+            }
+    }
+
+    private func browse() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = L10n.choose
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        onPick(url)
+    }
+}
 
 struct StaffDetailView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var harnessProfiles: StaffHarnessProfiles?
     @State private var reportsExpanded = false
     @State private var scopeExpanded = false
+    @State private var fenceTarget: FenceKind?
+    @State private var fenceFile: URL?
+    @State private var fenceAllowed: [String] = []
+    @State private var fenceDenied: [String] = []
 
     var body: some View {
         Group {
@@ -340,6 +407,10 @@ struct StaffDetailView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                Button(L10n.addAllowed) { beginFence(.allow, detail) }
+                Button(L10n.addDenied) { beginFence(.deny, detail) }
+            }
 
             if scopeExpanded {
                 Text(L10n.pathFenceHelp)
@@ -353,31 +424,111 @@ struct StaffDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if scopeExpanded && !detail.allowedPaths.isEmpty {
-                Text(L10n.allowedRw)
-                    .font(.subheadline.weight(.semibold))
+            if scopeExpanded {
+                fenceHeading(L10n.allowedRw, add: L10n.addAllowed) {
+                    beginFence(.allow, detail)
+                }
                 ForEach(detail.allowedPaths, id: \.self) { path in
-                    Text(path)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+                    fenceRow(path, destructive: false) {
+                        var next = detail.allowedPaths
+                        next.removeAll { $0 == path }
+                        appModel.setPathFence(file: detail.sourceFile, allowed: next, denied: detail.deniedHints)
+                    }
                 }
-            }
 
-            if scopeExpanded && !detail.deniedHints.isEmpty {
-                Text(L10n.deniedMustNot)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.top, 4)
+                fenceHeading(L10n.deniedMustNot, add: L10n.addDenied) {
+                    beginFence(.deny, detail)
+                }
+                .padding(.top, 4)
                 ForEach(detail.deniedHints, id: \.self) { path in
-                    Text(path)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.red.opacity(0.8))
-                        .textSelection(.enabled)
+                    fenceRow(path, destructive: true) {
+                        var next = detail.deniedHints
+                        next.removeAll { $0 == path }
+                        appModel.setPathFence(file: detail.sourceFile, allowed: detail.allowedPaths, denied: next)
+                    }
                 }
             }
+        }
+        .sheet(isPresented: Binding(
+            get: { fenceTarget != nil },
+            set: { if !$0 { fenceTarget = nil } }
+        )) {
+            PathFencePicker(
+                title: fenceTarget == .deny ? L10n.addDenied : L10n.addAllowed,
+                onPick: { url in
+                    commitFence(url)
+                },
+                onCancel: { fenceTarget = nil }
+            )
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func fenceHeading(_ title: String, add: String, action: @escaping () -> Void) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            Button(action: action) {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.borderless)
+            .help(add)
+        }
+    }
+
+    private func fenceRow(_ path: String, destructive: Bool, remove: @escaping () -> Void) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(path)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(destructive ? Color.red.opacity(0.8) : Color.primary)
+                .textSelection(.enabled)
+            Spacer()
+            Button(role: .destructive, action: remove) {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.removePath)
+        }
+    }
+
+    private func beginFence(_ kind: FenceKind, _ detail: StaffDetail) {
+        fenceTarget = kind
+        fenceFile = detail.sourceFile
+        fenceAllowed = detail.allowedPaths
+        fenceDenied = detail.deniedHints
+        scopeExpanded = true
+    }
+
+    private func commitFence(_ url: URL) {
+        guard let file = fenceFile, let kind = fenceTarget else { return }
+        let path = fencePath(for: url)
+        guard !path.isEmpty else { return }
+        var allowed = fenceAllowed
+        var denied = fenceDenied
+        if kind == .allow {
+            if !allowed.contains(path) { allowed.append(path) }
+        } else if !denied.contains(path) {
+            denied.append(path)
+        }
+        fenceTarget = nil
+        appModel.setPathFence(file: file, allowed: allowed, denied: denied)
+    }
+
+    /// Prefer a path relative to the company project. Keep an absolute path otherwise.
+    private func fencePath(for url: URL) -> String {
+        let picked = url.standardizedFileURL.path
+        guard let root = appModel.openCompany?.node.projectRoot?.standardizedFileURL.path else {
+            return picked
+        }
+        if picked == root { return "." }
+        let prefix = root.hasSuffix("/") ? root : root + "/"
+        if picked.hasPrefix(prefix) {
+            return String(picked.dropFirst(prefix.count))
+        }
+        return picked
     }
 
     private func createAndOpen(_ detail: StaffDetail, _ make: () throws -> URL) {

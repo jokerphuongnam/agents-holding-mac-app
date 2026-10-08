@@ -130,6 +130,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func setPathFence(file: URL, allowed: [String], denied: [String]) {
+        do {
+            try CompanyFileActions.writePathFence(file: file, allowed: allowed, denied: denied)
+            refreshOpenStaff()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func setStaffLead(of name: String, to lead: String, companyRoot: URL) {
         do {
             try CompanyFileActions.setLead(of: name, to: lead, companyRoot: companyRoot)
