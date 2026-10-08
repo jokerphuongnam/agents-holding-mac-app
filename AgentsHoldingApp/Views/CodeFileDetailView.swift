@@ -341,6 +341,7 @@ struct FileListSection: View {
     let emptyText: String
     /// Staff detail lists start closed; company canvas stays open.
     var collapsed: Bool = false
+    var createTitle: String = L10n.newFile
     var onCreate: ((String) -> Void)? = nil
     var onDelete: ((CodeFileRef) -> Void)? = nil
     let onOpen: (CodeFileRef) -> Void
@@ -356,6 +357,7 @@ struct FileListSection: View {
         files: [CodeFileRef],
         emptyText: String,
         collapsed: Bool = false,
+        createTitle: String = L10n.newFile,
         onCreate: ((String) -> Void)? = nil,
         onDelete: ((CodeFileRef) -> Void)? = nil,
         onOpen: @escaping (CodeFileRef) -> Void
@@ -365,6 +367,7 @@ struct FileListSection: View {
         self.files = files
         self.emptyText = emptyText
         self.collapsed = collapsed
+        self.createTitle = createTitle
         self.onCreate = onCreate
         self.onDelete = onDelete
         self.onOpen = onOpen
@@ -398,7 +401,7 @@ struct FileListSection: View {
             .disabled(!collapsed)
             .contextMenu {
                 if onCreate != nil {
-                    Button(L10n.newFile) { showingNew = true }
+                    Button(createTitle) { showingNew = true }
                 }
             }
 
@@ -407,7 +410,7 @@ struct FileListSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .alert(L10n.newFile, isPresented: $showingNew) {
+        .alert(createTitle, isPresented: $showingNew) {
             TextField(L10n.fileName, text: $newName)
             Button(L10n.add) {
                 let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)

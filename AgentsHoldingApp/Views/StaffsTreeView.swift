@@ -15,8 +15,13 @@ struct StaffsTreeView: View {
     var viewportMaxHeight: CGFloat? = 900
     /// Page scroll that contains this graph. Recenter uses it so the tree is not its own scroll.
     var scrollProxy: ScrollViewProxy? = nil
+    var companyRoot: URL? = nil
     let onSelect: (StaffNode) -> Void
+    @EnvironmentObject private var appModel: AppModel
     @StateObject private var zoomState = OrgGraphZoomState()
+    @State private var newStaffName = ""
+    @State private var newStaffTeam: String?
+    @State private var pendingDelete: StaffNode?
 
     private var focusStaffId: String? {
         let ids = roots.map(\.staff.id)
@@ -101,6 +106,38 @@ struct StaffsTreeView: View {
             }
             .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .alert(L10n.newStaff, isPresented: Binding(
+                get: { newStaffTeam != nil },
+                set: { if !$0 { newStaffTeam = nil } }
+            )) {
+                TextField(L10n.fileName, text: $newStaffName)
+                Button(L10n.add) {
+                    let name = newStaffName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let team = newStaffTeam
+                    newStaffName = ""
+                    newStaffTeam = nil
+                    guard let companyRoot, let team, !name.isEmpty else { return }
+                    appModel.addStaff(name: name, team: team, companyRoot: companyRoot)
+                }
+                Button(L10n.cancel, role: .cancel) {
+                    newStaffName = ""
+                    newStaffTeam = nil
+                }
+            }
+            .alert(L10n.deleteStaff, isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            )) {
+                Button(L10n.deleteStaff, role: .destructive) {
+                    if let staff = pendingDelete, let companyRoot {
+                        appModel.removeStaff(staff, companyRoot: companyRoot)
+                    }
+                    pendingDelete = nil
+                }
+                Button(L10n.cancel, role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text(L10n.deleteStaffConfirm(pendingDelete?.name ?? ""))
+            }
         }
     }
 
@@ -148,7 +185,17 @@ struct StaffsTreeView: View {
         let layout = self.layout
         return VStack(alignment: .leading, spacing: layout.rootSpacing) {
             ForEach(roots) { root in
-                OrgNodeView(node: root, depth: 0, layout: layout, onSelect: onSelect)
+                OrgNodeView(
+                    node: root,
+                    depth: 0,
+                    layout: layout,
+                    onSelect: onSelect,
+                    onNewStaff: companyRoot == nil ? nil : { staff in
+                        newStaffName = ""
+                        newStaffTeam = staff.team
+                    },
+                    onDeleteStaff: companyRoot == nil ? nil : { pendingDelete = $0 }
+                )
             }
         }
         .padding(layout.padding)
@@ -703,6 +750,8 @@ private struct OrgNodeView: View {
     let depth: Int
     let layout: OrgLayout
     let onSelect: (StaffNode) -> Void
+    var onNewStaff: ((StaffNode) -> Void)? = nil
+    var onDeleteStaff: ((StaffNode) -> Void)? = nil
 
     private var fanStyle: OrgFanStyle {
         let kids = node.children
@@ -760,7 +809,7 @@ private struct OrgNodeView: View {
         case .fan:
             HStack(alignment: .top, spacing: layout.siblingGap) {
                 ForEach(children) { child in
-                    OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect)
+                    OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect, onNewStaff: onNewStaff, onDeleteStaff: onDeleteStaff)
                 }
             }
         case .splitSides(let leftIds, let rightIds):
@@ -769,14 +818,14 @@ private struct OrgNodeView: View {
                 VStack(spacing: layout.stackGap) {
                     ForEach(leftIds, id: \.self) { id in
                         if let child = byId[id] {
-                            OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect)
+                            OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect, onNewStaff: onNewStaff, onDeleteStaff: onDeleteStaff)
                         }
                     }
                 }
                 VStack(spacing: layout.stackGap) {
                     ForEach(rightIds, id: \.self) { id in
                         if let child = byId[id] {
-                            OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect)
+                            OrgNodeView(node: child, depth: depth + 1, layout: layout, onSelect: onSelect, onNewStaff: onNewStaff, onDeleteStaff: onDeleteStaff)
                         }
                     }
                 }
@@ -826,6 +875,14 @@ private struct OrgNodeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(staff.id)
+        .contextMenu {
+            if onNewStaff != nil {
+                Button(L10n.newStaff) { onNewStaff?(staff) }
+            }
+            if onDeleteStaff != nil {
+                Button(L10n.deleteStaff, role: .destructive) { onDeleteStaff?(staff) }
+            }
+        }
     }
 
     private func cardIcon(_ staff: StaffNode, emphasized: Bool) -> String {

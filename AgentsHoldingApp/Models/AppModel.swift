@@ -121,6 +121,51 @@ final class AppModel: ObservableObject {
         selection = .staff(staff.id)
     }
 
+    func addStaff(name: String, team: String, companyRoot: URL) {
+        do {
+            try CompanyFileActions.createStaff(name: name, team: team, companyRoot: companyRoot)
+            refreshRoster(companyRoot)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func setStaffLead(of name: String, to lead: String, companyRoot: URL) {
+        do {
+            try CompanyFileActions.setLead(of: name, to: lead, companyRoot: companyRoot)
+            refreshOpenStaff()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func removeStaff(_ staff: StaffNode, companyRoot: URL) {
+        do {
+            try CompanyFileActions.deleteStaff(name: staff.name, team: staff.team, companyRoot: companyRoot)
+            if staffDetail?.node.id == staff.id {
+                staffDetail = nil
+                openSkill = nil
+                openCodeFile = nil
+                if let company = openCompany?.node {
+                    selection = .company(company.id)
+                } else {
+                    selection = .holding
+                }
+            }
+            refreshRoster(companyRoot)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func refreshRoster(_ companyRoot: URL) {
+        if openCompany?.companyRoot.path == companyRoot.path {
+            refreshOpenCompany()
+        } else if holdingPackageRoot?.path == companyRoot.path {
+            reloadHolding()
+        }
+    }
+
     func refreshOpenStaff() {
         guard let detail = staffDetail else { return }
         guard let updated = staffDirectory.loadStaffDetail(

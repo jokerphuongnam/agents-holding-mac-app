@@ -15,7 +15,7 @@ struct StaffsTreeWindowView: View {
             roots: StaffDirectory().buildStaffTree(companyRoot: companyRoot),
             showsHeading: true,
             viewportMaxHeight: nil,
-            windowID: nil
+            companyRoot: companyRoot
         ) { staff in
             appModel.openStaff(staff, companyRoot: companyRoot, inHolding: windowID.inHolding)
         }

@@ -40,7 +40,8 @@ struct CompanyCanvasView: View {
                                 StaffsTreeView(
                                     roots: StaffDirectory().buildStaffTree(companyRoot: snap.companyRoot),
                                     showsHeading: false,
-                                    scrollProxy: proxy
+                                    scrollProxy: proxy,
+                                    companyRoot: snap.companyRoot
                                 ) { staff in
                                     appModel.openStaff(staff, inHolding: false)
                                 }
@@ -131,7 +132,11 @@ struct CompanyCanvasView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(teams) { team in
-                    TeamBlock(team: team, reportCounts: counts) { staff in
+                    TeamBlock(
+                        team: team,
+                        reportCounts: counts,
+                        companyRoot: snap.companyRoot
+                    ) { staff in
                         appModel.openStaff(staff, inHolding: false)
                     }
                 }
@@ -191,9 +196,14 @@ struct CompanyCanvasView: View {
 }
 
 struct TeamBlock: View {
+    @EnvironmentObject private var appModel: AppModel
     let team: TeamNode
     var reportCounts: [String: Int] = [:]
+    var companyRoot: URL? = nil
     let onStaff: (StaffNode) -> Void
+
+    @State private var newName = ""
+    @State private var showingNew = false
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: 140), spacing: 10)]
@@ -204,6 +214,11 @@ struct TeamBlock: View {
             HStack {
                 Text(team.name)
                     .font(.title3.weight(.semibold))
+                    .contextMenu {
+                        if companyRoot != nil {
+                            Button(L10n.newStaff) { showingNew = true }
+                        }
+                    }
                 Text("\(team.staffs.count)")
                     .font(.caption)
                     .padding(.horizontal, 6)
@@ -218,7 +233,9 @@ struct TeamBlock: View {
             } else if !team.staffs.isEmpty {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(team.staffs) { staff in
-                        StaffCard(staff: staff, reportCount: reportCounts[staff.name] ?? 0) {
+                        StaffCard(staff: staff, reportCount: reportCounts[staff.name] ?? 0, onDelete: companyRoot.map { root in
+                            { appModel.removeStaff(staff, companyRoot: root) }
+                        }) {
                             onStaff(staff)
                         }
                     }
@@ -229,20 +246,38 @@ struct TeamBlock: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 ForEach(team.childTeams) { child in
-                    TeamBlock(team: child, reportCounts: reportCounts, onStaff: onStaff)
+                    TeamBlock(
+                        team: child,
+                        reportCounts: reportCounts,
+                        companyRoot: companyRoot,
+                        onStaff: onStaff
+                    )
                 }
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
+        .alert(L10n.newStaff, isPresented: $showingNew) {
+            TextField(L10n.fileName, text: $newName)
+            Button(L10n.add) {
+                let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                newName = ""
+                guard let companyRoot, !name.isEmpty else { return }
+                appModel.addStaff(name: name, team: team.id, companyRoot: companyRoot)
+            }
+            Button(L10n.cancel, role: .cancel) { newName = "" }
+        }
     }
 }
 
 struct StaffCard: View {
     let staff: StaffNode
     var reportCount: Int = 0
+    var onDelete: (() -> Void)? = nil
     let action: () -> Void
+
+    @State private var confirmingDelete = false
 
     var body: some View {
         Button(action: action) {
@@ -276,5 +311,16 @@ struct StaffCard: View {
             .background(.background.opacity(0.8), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if onDelete != nil {
+                Button(L10n.deleteStaff, role: .destructive) { confirmingDelete = true }
+            }
+        }
+        .alert(L10n.deleteStaff, isPresented: $confirmingDelete) {
+            Button(L10n.deleteStaff, role: .destructive) { onDelete?() }
+            Button(L10n.cancel, role: .cancel) {}
+        } message: {
+            Text(L10n.deleteStaffConfirm(staff.name))
+        }
     }
 }

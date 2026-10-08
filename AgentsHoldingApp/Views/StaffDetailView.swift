@@ -22,6 +22,7 @@ struct StaffDetailView: View {
                                 files: detail.plans,
                                 emptyText: "",
                                 collapsed: true,
+                                createTitle: L10n.newPlan,
                                 onCreate: { name in
                                     createAndOpen(detail) {
                                         try CompanyFileActions.createPlan(
@@ -43,6 +44,7 @@ struct StaffDetailView: View {
                             files: detail.skillFiles,
                             emptyText: L10n.skillsEmpty(detail.node.team, detail.node.name),
                             collapsed: true,
+                            createTitle: L10n.newSkill,
                             onCreate: { name in
                                 createAndOpen(detail) {
                                     try CompanyFileActions.createSkill(
@@ -70,6 +72,7 @@ struct StaffDetailView: View {
                             files: detail.scriptFiles,
                             emptyText: L10n.scriptsEmpty,
                             collapsed: true,
+                            createTitle: L10n.newScript,
                             onCreate: { name in
                                 createAndOpen(detail) {
                                     try CompanyFileActions.createScript(
@@ -119,6 +122,11 @@ struct StaffDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(detail.node.name)
                 .font(.largeTitle.weight(.semibold))
+                .contextMenu {
+                    Button(L10n.deleteStaff, role: .destructive) {
+                        appModel.removeStaff(detail.node, companyRoot: detail.companyRoot)
+                    }
+                }
             Text(L10n.team(detail.node.team))
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
@@ -160,6 +168,35 @@ struct StaffDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @ViewBuilder
+    private func superiorMenu(_ detail: StaffDetail) -> some View {
+        Button(L10n.clearSuperior) {
+            appModel.setStaffLead(of: detail.node.name, to: "", companyRoot: detail.companyRoot)
+        }
+        ForEach(hopCandidates(detail).filter { $0.name != detail.lead }, id: \.id) { staff in
+            Button(staff.name) {
+                appModel.setStaffLead(of: detail.node.name, to: staff.name, companyRoot: detail.companyRoot)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func reportsMenu(_ detail: StaffDetail) -> some View {
+        let reporting = Set(detail.reports.map(\.name))
+        ForEach(hopCandidates(detail).filter { !reporting.contains($0.name) }, id: \.id) { staff in
+            Button(L10n.addReport(staff.name)) {
+                appModel.setStaffLead(of: staff.name, to: detail.node.name, companyRoot: detail.companyRoot)
+            }
+        }
+    }
+
+    private func hopCandidates(_ detail: StaffDetail) -> [StaffNode] {
+        StaffDirectory().loadTeams(companyRoot: detail.companyRoot)
+            .flatMap(\.allStaffs)
+            .filter { $0.name != detail.node.name }
+            .sorted { $0.name < $1.name }
+    }
+
     private func badge(_ text: String) -> some View {
         Text(text)
             .font(.caption)
@@ -181,6 +218,9 @@ struct StaffDetailView: View {
                 Text(L10n.superiorLabel)
                     .foregroundStyle(.secondary)
                     .frame(width: 200, alignment: .leading)
+                    .contextMenu {
+                        superiorMenu(detail)
+                    }
                 if let lead = detail.lead, !lead.isEmpty {
                     Button {
                         appModel.openStaffNamed(lead)
@@ -196,6 +236,7 @@ struct StaffDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .help(L10n.openSuperior)
+                    .contextMenu { superiorMenu(detail) }
                 } else {
                     Text(L10n.topDispatcher)
                         .foregroundStyle(.tertiary)
@@ -222,6 +263,7 @@ struct StaffDetailView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .contextMenu { reportsMenu(detail) }
                 if reportsExpanded && detail.reports.isEmpty {
                     Text(L10n.noReportsLeaf)
                         .foregroundStyle(.tertiary)
@@ -250,6 +292,17 @@ struct StaffDetailView: View {
                                 .padding(.horizontal, 8)
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(L10n.removeReport, role: .destructive) {
+                                    let fallback = detail.lead ?? ""
+                                    let next = fallback == report.name ? "" : fallback
+                                    appModel.setStaffLead(
+                                        of: report.name,
+                                        to: next,
+                                        companyRoot: detail.companyRoot
+                                    )
+                                }
+                            }
                             if report.id != detail.reports.last?.id {
                                 Divider()
                             }

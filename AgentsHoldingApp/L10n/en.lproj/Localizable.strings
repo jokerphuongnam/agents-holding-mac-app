@@ -71,6 +71,15 @@
 "undo" = "Undo";
 "redo" = "Redo";
 "new_file" = "New file";
+"new_plan" = "New plan";
+"new_skill" = "New skill";
+"new_script" = "New script";
+"new_staff" = "New staff";
+"delete_staff" = "Delete staff";
+"delete_staff_confirm" = "Delete %@? The staff file and hop row are removed.";
+"clear_superior" = "Clear superior";
+"add_report" = "Add report: %@";
+"remove_report" = "Remove from hop";
 "file_name" = "File name";
 "delete_file" = "Delete";
 "delete_file_confirm" = "Delete %@? This cannot be undone.";

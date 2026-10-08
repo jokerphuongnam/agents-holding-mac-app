@@ -21,7 +21,8 @@ struct HoldingCanvasView: View {
                             companiesSection(holding)
                             StaffsTreeView(
                                 roots: StaffDirectory().buildStaffTree(companyRoot: holding.packageRoot),
-                                scrollProxy: proxy
+                                scrollProxy: proxy,
+                                companyRoot: holding.packageRoot
                             ) { staff in
                                 appModel.openStaff(staff, inHolding: true)
                             }
