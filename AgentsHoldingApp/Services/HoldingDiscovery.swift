@@ -208,7 +208,12 @@ struct HoldingDiscovery {
         for company in primary + secondary {
             let key = publicIdentityKey(company)
             if byID[key] == nil {
-                byID[key] = company
+                var named = company
+                if let path = company.companyPath,
+                   let stored = CompanyFileActions.storedDisplayName(companyPath: path) {
+                    named.displayName = stored
+                }
+                byID[key] = named
             }
         }
         return byID.values.sorted {

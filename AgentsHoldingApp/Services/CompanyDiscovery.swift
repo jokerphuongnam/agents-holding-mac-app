@@ -25,6 +25,9 @@ struct CompanyDiscovery {
         if enriched.companyPath == nil {
             enriched.companyPath = companyPath
         }
+        if let stored = CompanyFileActions.storedDisplayName(companyPath: companyPath) {
+            enriched.displayName = stored
+        }
 
         return CompanySnapshot(
             node: enriched,

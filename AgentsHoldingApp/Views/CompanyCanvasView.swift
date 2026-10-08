@@ -18,6 +18,9 @@ private enum CompanyRosterTab: String, CaseIterable, Identifiable {
 struct CompanyCanvasView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var rosterTab: CompanyRosterTab = .tree
+    @State private var nameDraft = ""
+    @State private var editingName = false
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         Group {
@@ -85,10 +88,40 @@ struct CompanyCanvasView: View {
         [GridItem(.adaptive(minimum: 160), spacing: 12)]
     }
 
+    private func commitCompanyName(_ snap: CompanySnapshot) {
+        let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != snap.node.displayName else {
+            nameDraft = snap.node.displayName
+            return
+        }
+        appModel.renameOpenCompany(to: trimmed)
+        editingName = false
+    }
+
     private func header(_ snap: CompanySnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(snap.node.displayName)
-                .font(.title2.weight(.semibold))
+            HStack(alignment: .center, spacing: 8) {
+                if editingName {
+                    TextField("", text: $nameDraft)
+                        .font(.title2.weight(.semibold))
+                        .textFieldStyle(.plain)
+                        .focused($nameFocused)
+                        .onSubmit { commitCompanyName(snap) }
+                } else {
+                    Text(snap.node.displayName)
+                        .font(.title2.weight(.semibold))
+                }
+                NameEditButton {
+                    nameDraft = snap.node.displayName
+                    editingName = true
+                    nameFocused = true
+                }
+            }
+            .onAppear { nameDraft = snap.node.displayName }
+            .onChange(of: snap.node.displayName) { _, name in
+                nameDraft = name
+                editingName = false
+            }
             Text(snap.node.slug)
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {

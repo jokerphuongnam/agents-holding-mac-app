@@ -100,6 +100,55 @@ enum CompanyFileActions {
         return start..<end
     }
 
+    /// Rename a staff everywhere the hop uses that id: file, frontmatter, agents, roster, skill folder.
+    static func renameStaff(from old: String, to raw: String, team: String, companyRoot: URL) throws -> String {
+        let slug = slugify(raw)
+        guard slug != old else { return old }
+        let folder = appendRelative(team, to: companyRoot.appendingPathComponent("system/staffs"))
+        let source = folder.appendingPathComponent("\(old).md")
+        let destination = folder.appendingPathComponent("\(slug).md")
+        if FileManager.default.fileExists(atPath: destination.path) {
+            throw CocoaError(.fileWriteFileExists)
+        }
+        if FileManager.default.fileExists(atPath: source.path) {
+            try FileManager.default.moveItem(at: source, to: destination)
+        }
+        try setFrontmatter(destination, key: "name", value: slug)
+        try replaceName(old, with: slug, in: hopData(companyRoot, "agents.tsv"))
+        try replaceName(old, with: slug, in: hopData(companyRoot, "roster.tsv"))
+        try renameCustomsFolder(team: team, from: old, to: slug, companyRoot: companyRoot)
+        try renameRouterMatch(from: old, to: slug, companyRoot: companyRoot)
+        return slug
+    }
+
+    /// Visible company title. Slug and folder stay put.
+    static func storedDisplayName(companyPath: URL) -> String? {
+        let url = companyPath.appendingPathComponent("COMPANY.md")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        for line in text.components(separatedBy: .newlines).prefix(20) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("name:") else { continue }
+            let value = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            return value.isEmpty ? nil : value
+        }
+        return nil
+    }
+
+    static func setDisplayName(_ name: String, companyPath: URL) throws {
+        let url = companyPath.appendingPathComponent("COMPANY.md")
+        var lines = ((try? String(contentsOf: url, encoding: .utf8)) ?? "").components(separatedBy: "\n")
+        let row = "name: \(name)"
+        if let index = lines.prefix(20).firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("name:")
+        }) {
+            lines[index] = row
+        } else {
+            lines.insert(row, at: 0)
+            lines.insert("", at: 1)
+        }
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
     static func setTier(of name: String, to tier: String, staffFile: URL, companyRoot: URL) throws {
         try updateAgentColumn(name: name, column: "tier", value: tier, companyRoot: companyRoot)
         try setFrontmatter(staffFile, key: "tier", value: tier)
@@ -237,6 +286,36 @@ enum CompanyFileActions {
             return cols.count >= 2 && (cols[0] == name || cols[1] == name)
         }
         try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func replaceName(_ old: String, with new: String, in url: URL) throws {
+        guard var lines = try? String(contentsOf: url, encoding: .utf8).components(separatedBy: .newlines) else { return }
+        for index in lines.indices {
+            var cols = lines[index].split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            var changed = false
+            for col in cols.indices where cols[col] == old {
+                cols[col] = new
+                changed = true
+            }
+            if changed { lines[index] = cols.joined(separator: "\t") }
+        }
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func renameCustomsFolder(team: String, from old: String, to new: String, companyRoot: URL) throws {
+        let customs = companyRoot.appendingPathComponent("system/skills/customs")
+        let source = appendRelative(team, to: customs).appendingPathComponent(old)
+        let destination = appendRelative(team, to: customs).appendingPathComponent(new)
+        guard FileManager.default.fileExists(atPath: source.path),
+              !FileManager.default.fileExists(atPath: destination.path) else { return }
+        try FileManager.default.moveItem(at: source, to: destination)
+    }
+
+    private static func renameRouterMatch(from old: String, to new: String, companyRoot: URL) throws {
+        let url = companyRoot.appendingPathComponent("system/harness/runtime_router.toml")
+        guard var text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        text = text.replacingOccurrences(of: "match = \"\(old)\"", with: "match = \"\(new)\"")
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private static func appendRelative(_ relative: String, to base: URL) -> URL {

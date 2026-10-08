@@ -130,6 +130,50 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func renameStaff(_ detail: StaffDetail, to raw: String) {
+        if let holding = holdingPackageRoot,
+           detail.companyRoot.standardizedFileURL.path == holding.standardizedFileURL.path {
+            return
+        }
+        do {
+            let slug = try CompanyFileActions.renameStaff(
+                from: detail.node.name,
+                to: raw,
+                team: detail.node.team,
+                companyRoot: detail.companyRoot
+            )
+            refreshRoster(detail.companyRoot)
+            let node = StaffNode(name: slug, team: detail.node.team, blurb: detail.node.blurb)
+            openStaff(node, companyRoot: detail.companyRoot, inHolding: openCompany == nil)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func renameOpenCompany(to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var snap = openCompany, !trimmed.isEmpty else { return }
+        do {
+            try CompanyFileActions.setDisplayName(trimmed, companyPath: snap.companyRoot)
+            snap.node.displayName = trimmed
+            openCompany = snap
+            if let index = companyStack.firstIndex(where: { $0.id == snap.node.id }) {
+                companyStack[index].displayName = trimmed
+            }
+            if var holding {
+                holding.companies = holding.companies.map { company in
+                    guard company.id == snap.node.id else { return company }
+                    var copy = company
+                    copy.displayName = trimmed
+                    return copy
+                }
+                self.holding = holding
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func setPathFence(file: URL, allowed: [String], denied: [String]) {
         do {
             try CompanyFileActions.writePathFence(file: file, allowed: allowed, denied: denied)

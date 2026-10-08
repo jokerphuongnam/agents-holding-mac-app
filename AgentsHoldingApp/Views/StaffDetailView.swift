@@ -16,6 +16,22 @@ enum PrismAppLink {
     }
 }
 
+struct NameEditButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "pencil")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
+                .background(.quaternary.opacity(0.9), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help(L10n.edit)
+    }
+}
+
 private enum FenceKind {
     case allow
     case deny
@@ -80,6 +96,9 @@ private struct PathFencePicker: View {
 struct StaffDetailView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var harnessProfiles: StaffHarnessProfiles?
+    @State private var staffNameDraft = ""
+    @State private var editingStaffName = false
+    @FocusState private var staffNameFocused: Bool
     @State private var reportsExpanded = false
     @State private var scopeExpanded = false
     @State private var fenceTarget: FenceKind?
@@ -200,13 +219,38 @@ struct StaffDetailView: View {
 
     private func header(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(detail.node.name)
-                .font(.largeTitle.weight(.semibold))
-                .contextMenu {
-                    Button(L10n.deleteStaff, role: .destructive) {
-                        appModel.removeStaff(detail.node, companyRoot: detail.companyRoot)
+            HStack(alignment: .center, spacing: 8) {
+                if editingStaffName {
+                    TextField("", text: $staffNameDraft)
+                        .font(.largeTitle.weight(.semibold))
+                        .textFieldStyle(.plain)
+                        .focused($staffNameFocused)
+                        .onSubmit {
+                            commitStaffName(detail)
+                            editingStaffName = false
+                        }
+                } else {
+                    Text(detail.node.name)
+                        .font(.largeTitle.weight(.semibold))
+                        .contextMenu {
+                            Button(L10n.deleteStaff, role: .destructive) {
+                                appModel.removeStaff(detail.node, companyRoot: detail.companyRoot)
+                            }
+                        }
+                }
+                if canRename(detail) {
+                    NameEditButton {
+                        staffNameDraft = detail.node.name
+                        editingStaffName = true
+                        staffNameFocused = true
                     }
                 }
+            }
+            .onAppear { staffNameDraft = detail.node.name }
+            .onChange(of: detail.node.name) { _, name in
+                staffNameDraft = name
+                editingStaffName = false
+            }
             Text(L10n.team(detail.node.team))
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
@@ -255,6 +299,21 @@ struct StaffDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Holding staff names are fixed. Company staff names can change.
+    private func canRename(_ detail: StaffDetail) -> Bool {
+        guard let holding = appModel.holdingPackageRoot else { return true }
+        return detail.companyRoot.standardizedFileURL.path != holding.standardizedFileURL.path
+    }
+
+    private func commitStaffName(_ detail: StaffDetail) {
+        let trimmed = staffNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != detail.node.name else {
+            staffNameDraft = detail.node.name
+            return
+        }
+        appModel.renameStaff(detail, to: trimmed)
     }
 
     /// Product folder Prism should open. Company OS lives under `.agents/`.
