@@ -83,6 +83,8 @@ struct StaffDetail: Hashable {
     var permissionMode: String
     var capabilityMode: String
     var lead: String?
+    /// Functional lead in addition to the team lead. QA staff also report to `qc-lead`.
+    var realLead: String?
     var reports: [StaffNode]
     var skills: [SkillRef]
     /// File rows for this staff's SKILL.md (same set as skills, for file-list UI).

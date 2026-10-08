@@ -309,6 +309,26 @@ struct StaffDetailView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            if let realLead = detail.realLead, !realLead.isEmpty {
+                HStack(alignment: .top) {
+                    Text(NSLocalizedString("real_lead_label", comment: ""))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 200, alignment: .leading)
+                    Button {
+                        appModel.openStaffNamed(realLead)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.fill")
+                            Text(realLead)
+                                .fontWeight(.semibold)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Button {

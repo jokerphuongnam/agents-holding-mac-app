@@ -70,8 +70,16 @@ struct StaffDirectory {
         // Superior = who may Assign/hop to command this staff.
         // agents.tsv `lead` when set; else company `ceo` / holding `holding-ceo` (tops have none).
         let lead = resolveLead(name: name, row: row, agents: agents, companyRoot: companyRoot)
+        let realLead = resolveRealLead(name: name, teamLead: lead, agents: agents)
         let reports = allNodes.filter { staff in
-            resolveLead(name: staff.name, row: agents[staff.name], agents: agents, companyRoot: companyRoot) == name
+            let teamLead = resolveLead(
+                name: staff.name,
+                row: agents[staff.name],
+                agents: agents,
+                companyRoot: companyRoot
+            )
+            if teamLead == name { return true }
+            return resolveRealLead(name: staff.name, teamLead: teamLead, agents: agents) == name
         }.sorted { $0.name < $1.name }
 
         let skillIDs = row?.skillIDs ?? []
@@ -103,6 +111,7 @@ struct StaffDirectory {
             permissionMode: row?.permissionMode ?? frontmatter(body, key: "permission_mode") ?? "",
             capabilityMode: row?.capabilityMode ?? frontmatter(body, key: "capability_mode") ?? "",
             lead: lead,
+            realLead: realLead,
             reports: reports,
             skills: skills,
             skillFiles: skillFiles,
@@ -142,6 +151,14 @@ struct StaffDirectory {
             return top
         }
         return nil
+    }
+
+    /// QA staff keep their team lead and also report to the company QA lead.
+    func resolveRealLead(name: String, teamLead: String?, agents: [String: AgentRow]) -> String? {
+        guard name.hasSuffix("-qc") || name.hasSuffix("-quality-lead") else { return nil }
+        let functional = agents["qc-lead"] != nil ? "qc-lead" : (agents["qa-lead"] != nil ? "qa-lead" : nil)
+        guard let functional, functional != name, functional != teamLead else { return nil }
+        return functional
     }
 
     /// The single `*-lead` sitting next to this staff file, if there is exactly one.

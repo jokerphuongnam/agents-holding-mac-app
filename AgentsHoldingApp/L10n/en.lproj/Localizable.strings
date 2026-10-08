@@ -104,6 +104,7 @@
 "org_hop_chain" = "Org (hop chain)";
 "org_hop_help" = "Superior = staff who can Assign/hop to command this person. Reports = people this staff can hop to.";
 "superior_label" = "Superior (can hop → me)";
+"real_lead_label" = "Real lead (QA)";
 "reports_label" = "Reports (I hop → them)";
 "top_dispatcher" = "— (top dispatcher)";
 "no_reports_leaf" = "No reports (leaf)";

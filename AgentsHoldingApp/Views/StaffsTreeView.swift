@@ -760,8 +760,8 @@ private struct OrgNodeView: View {
         if allLeaves, kids.count >= OrgLayout.splitThreshold {
             let mid = (kids.count + 1) / 2
             return .splitSides(
-                leftIds: kids.prefix(mid).map(\.staff.id),
-                rightIds: kids.suffix(kids.count - mid).map(\.staff.id)
+                leftIds: kids.prefix(mid).map(\.id),
+                rightIds: kids.suffix(kids.count - mid).map(\.id)
             )
         }
         return .fan
@@ -770,8 +770,8 @@ private struct OrgNodeView: View {
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             staffCard(node.staff, emphasized: depth == 0)
-                .id(OrgScrollAnchor.card(node.staff.id))
-                .background(cardAnchor(node.staff.id))
+                .id(OrgScrollAnchor.card(node.id))
+                .background(cardAnchor(node.id))
 
             if !node.children.isEmpty {
                 Color.clear
@@ -783,9 +783,9 @@ private struct OrgNodeView: View {
             GeometryReader { geo in
                 let origin = geo.frame(in: .named(OrgChartSpace.name)).origin
                 OrgConnectorCanvas(
-                    parentId: node.staff.id,
+                    parentId: node.id,
                     style: fanStyle,
-                    directChildIds: node.children.map(\.staff.id),
+                    directChildIds: node.children.map(\.id),
                     frames: frames,
                     origin: origin,
                     layout: layout
@@ -813,7 +813,7 @@ private struct OrgNodeView: View {
                 }
             }
         case .splitSides(let leftIds, let rightIds):
-            let byId = Dictionary(uniqueKeysWithValues: children.map { ($0.staff.id, $0) })
+            let byId = Dictionary(uniqueKeysWithValues: children.map { ($0.id, $0) })
             HStack(alignment: .top, spacing: layout.centerGutter) {
                 VStack(spacing: layout.stackGap) {
                     ForEach(leftIds, id: \.self) { id in

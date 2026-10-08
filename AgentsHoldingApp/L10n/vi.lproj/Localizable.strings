@@ -104,6 +104,7 @@
 "org_hop_chain" = "Org (chuỗi hop)";
 "org_hop_help" = "Cấp trên = staff có thể Assign/hop để ra lệnh cho người này. Cấp dưới = người này hop ra lệnh được.";
 "superior_label" = "Cấp trên (có thể hop → mình)";
+"real_lead_label" = "Lead thật (QA)";
 "reports_label" = "Cấp dưới (mình hop → họ)";
 "top_dispatcher" = "— (đỉnh điều phối)";
 "no_reports_leaf" = "Không hop xuống staff nào (leaf)";

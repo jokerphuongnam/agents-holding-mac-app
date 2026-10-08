@@ -2,7 +2,8 @@ import Foundation
 
 /// Org tree node: CEO → reports → … (hop chain).
 struct StaffTreeNode: Identifiable, Hashable {
-    var id: String { staff.id }
+    /// Unique per placement. One staff can sit under a team lead and a real lead.
+    var id: String
     var staff: StaffNode
     var children: [StaffTreeNode]
 }
@@ -18,6 +19,7 @@ extension StaffDirectory {
         for s in all { byName[s.name] = s }
 
         var childrenMap: [String: [StaffNode]] = [:]
+        var realChildren: [String: [StaffNode]] = [:]
         var roots: [StaffNode] = []
 
         for staff in all {
@@ -31,6 +33,10 @@ extension StaffDirectory {
                 childrenMap[lead, default: []].append(staff)
             } else {
                 roots.append(staff)
+            }
+            let real = resolveRealLead(name: staff.name, teamLead: lead, agents: agents)
+            if let real, byName[real] != nil {
+                realChildren[real, default: []].append(staff)
             }
         }
 
@@ -46,20 +52,32 @@ extension StaffDirectory {
             return a.name < b.name
         }
 
-        func build(_ staff: StaffNode, stack: Set<String>) -> StaffTreeNode {
+        func build(_ staff: StaffNode, parent: String, stack: Set<String>, expand: Bool) -> StaffTreeNode {
             var nextStack = stack
             nextStack.insert(staff.name)
-            let kids = (childrenMap[staff.name] ?? [])
-                .sorted { $0.name < $1.name }
-                .filter { !stack.contains($0.name) }
-                .map { build($0, stack: nextStack) }
-            return StaffTreeNode(staff: staff, children: kids)
+            let teamKids = expand
+                ? (childrenMap[staff.name] ?? [])
+                    .sorted { $0.name < $1.name }
+                    .filter { !nextStack.contains($0.name) }
+                    .map { build($0, parent: staff.name, stack: nextStack, expand: true) }
+                : []
+            let extraKids = expand
+                ? (realChildren[staff.name] ?? [])
+                    .sorted { $0.name < $1.name }
+                    .filter { !nextStack.contains($0.name) }
+                    .map { build($0, parent: "\(staff.name)#real", stack: nextStack, expand: false) }
+                : []
+            return StaffTreeNode(
+                id: "\(parent)/\(staff.id)",
+                staff: staff,
+                children: teamKids + extraKids
+            )
         }
 
         // If we somehow got many "roots", still show a tree starting from ceo when present.
         if let ceo = byName["holding-ceo"] ?? byName["ceo"] {
-            return [build(ceo, stack: [])]
+            return [build(ceo, parent: "root", stack: [], expand: true)]
         }
-        return roots.map { build($0, stack: []) }
+        return roots.map { build($0, parent: "root", stack: [], expand: true) }
     }
 }
