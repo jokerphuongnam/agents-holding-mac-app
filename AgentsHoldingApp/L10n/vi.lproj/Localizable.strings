@@ -28,6 +28,12 @@
 "chat_working" = "Đang làm";
 "chat_recap" = "Recap";
 "chat_send" = "Gửi";
+"chat_send_now" = "Gửi ngay";
+"chat_phase_thinking" = "Đang nghĩ";
+"chat_phase_edit" = "Đang sửa";
+"chat_phase_read" = "Đang đọc";
+"chat_phase_search" = "Đang tìm";
+"chat_phase_run" = "Đang chạy";
 "chat_placeholder" = "Tin nhắn";
 "chat_thread" = "Luồng";
 "chat_mirror" = "Mirror git vào history của company";

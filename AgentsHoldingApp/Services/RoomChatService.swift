@@ -1,13 +1,35 @@
 import Foundation
 
+struct RoomChatError: LocalizedError {
+    var text: String
+    var errorDescription: String? { text }
+}
+
+struct TalkStep: Hashable, Sendable, Identifiable {
+    var kind: String
+    var detail: String
+
+    var id: String { kind + "\t" + detail }
+}
+
 struct TalkLine: Identifiable, Hashable, Sendable {
     var hash: String
     var author: String
     var date: String
     var thread: String
     var message: String
+    var steps: [TalkStep]
 
     var id: String { hash }
+
+    init(hash: String, author: String, date: String, thread: String, message: String, steps: [TalkStep] = []) {
+        self.hash = hash
+        self.author = author
+        self.date = date
+        self.thread = thread
+        self.message = message
+        self.steps = steps
+    }
 }
 
 struct StaffWorkState: Identifiable, Hashable {
@@ -95,8 +117,7 @@ enum RoomChatService {
         return lines.reversed()
     }
 
-    /// A file commit is the user message. Staff who own the changed paths are assumed to have done that work.
-    /// Spoken lines with no file change, and staff replies, come from the chat cache.
+    /// A file commit is the user message. Progress lines in a turn are dropped; one closing line remains.
     static func conversation(companyRoot: URL, room: String) async -> [TalkLine] {
         let root = companyRoot
         let name = room
@@ -106,8 +127,6 @@ enum RoomChatService {
     }
 
     private static func assemble(companyRoot: URL, room: String) async -> [TalkLine] {
-        let routes = loadRoutes(companyRoot)
-        let store = companyRoot.appendingPathComponent("cache/work-history")
         let history = commits(companyRoot: companyRoot, room: room)
         async let spoken = Task.detached { talk(companyRoot: companyRoot, room: room) }.value
         async let cache = Task.detached { cachedChat() }.value
@@ -115,23 +134,7 @@ enum RoomChatService {
             for commit in history {
                 let commit = commit
                 group.addTask {
-                    var chunk = [TalkLine(hash: commit.hash, author: "user", date: commit.date, thread: "ceo", message: commit.message)]
-                    var byStaff: [String: [String]] = [:]
-                    for file in changedFiles(store: store, commit: commit.hash) {
-                        let staff = routeOwner(file, routes)
-                        byStaff[staff, default: []].append(file)
-                    }
-                    for staff in byStaff.keys.sorted() {
-                        let shown = (byStaff[staff] ?? []).prefix(4).joined(separator: ", ")
-                        chunk.append(TalkLine(
-                            hash: "\(commit.hash)-\(staff)",
-                            author: staff,
-                            date: commit.date,
-                            thread: "ceo",
-                            message: shown
-                        ))
-                    }
-                    return chunk
+                    [TalkLine(hash: commit.hash, author: "user", date: commit.date, thread: "ceo", message: commit.message)]
                 }
             }
             var gathered: [TalkLine] = []
@@ -152,32 +155,6 @@ enum RoomChatService {
         }
     }
 
-    private static func changedFiles(store: URL, commit: String) -> [String] {
-        let output = run([
-            "git", "--git-dir", store.path, "diff-tree", "--no-commit-id", "--name-only", "-r", commit
-        ]).text
-        return output.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
-    }
-
-    private static func loadRoutes(_ companyRoot: URL) -> [(String, String)] {
-        let file = companyRoot.appendingPathComponent("system/skills/defaults/marlin-hop/data/route.tsv")
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
-        var routes: [(String, String)] = []
-        for line in text.split(separator: "\n").dropFirst() {
-            let cols = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            guard cols.count >= 2, !cols[0].isEmpty, !cols[1].isEmpty else { continue }
-            routes.append((cols[0], cols[1]))
-        }
-        return routes.sorted { $0.0.count > $1.0.count }
-    }
-
-    private static func routeOwner(_ path: String, _ routes: [(String, String)]) -> String {
-        for route in routes where path.hasPrefix(route.0) {
-            return route.1
-        }
-        return "ceo"
-    }
-
     private static func cachedChat() -> [TalkLine] {
         let sessions = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".grok/sessions")
         guard let enumerator = FileManager.default.enumerator(at: sessions, includingPropertiesForKeys: [.contentModificationDateKey]) else {
@@ -195,32 +172,100 @@ enum RoomChatService {
         let formatter = ISO8601DateFormatter()
         for (url, modified) in files.prefix(2) {
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            var offset = 0
+            var spoken: [(String, String, [TalkStep])] = []
+            var closing = ""
+            var steps: [TalkStep] = []
+            func note(_ step: TalkStep) {
+                if steps.last == step { return }
+                steps.append(step)
+                if steps.count > 12 { steps.removeFirst(steps.count - 12) }
+            }
+            func keepClosing() {
+                let text = closing.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty || !steps.isEmpty {
+                    spoken.append(("ceo", text, steps))
+                }
+                closing = ""
+                steps = []
+            }
             for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
                 guard let data = String(raw).data(using: .utf8),
                       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       object["synthetic_reason"] == nil,
-                      let kind = object["type"] as? String,
-                      let content = object["content"] as? String else { continue }
-                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                let author: String
-                if kind == "user" { author = "user" }
-                else if kind == "assistant" { author = "ceo" }
-                else { continue }
+                      let kind = object["type"] as? String else { continue }
+                if kind == "reasoning" {
+                    note(TalkStep(kind: "thinking", detail: ""))
+                    continue
+                }
+                let trimmed = Self.visibleChat(Self.plainContent(object["content"]))
+                if kind == "user" {
+                    keepClosing()
+                    guard !trimmed.isEmpty else { continue }
+                    spoken.append(("user", trimmed, []))
+                } else if kind == "assistant" {
+                    if !trimmed.isEmpty { closing = trimmed }
+                    for step in Self.activity(object["tool_calls"]) {
+                        note(step)
+                    }
+                }
+            }
+            keepClosing()
+            let recent = spoken.suffix(80)
+            for (offset, item) in recent.enumerated() {
                 let date = formatter.string(from: modified.addingTimeInterval(TimeInterval(offset)))
                 lines.append(TalkLine(
-                    hash: "\(url.lastPathComponent)-\(offset)",
-                    author: author,
+                    hash: "\(url.deletingLastPathComponent().lastPathComponent)-\(offset)",
+                    author: item.0,
                     date: date,
                     thread: "ceo",
-                    message: String(trimmed.prefix(600))
+                    message: String(item.1.prefix(600)),
+                    steps: item.2
                 ))
-                offset += 1
-                if offset > 80 { break }
             }
         }
         return lines
+    }
+
+    /// Tool calls become short activity rows: thinking, writing an edit, reading, searching, running.
+    private static func activity(_ value: Any?) -> [TalkStep] {
+        guard let calls = value as? [[String: Any]] else { return [] }
+        return calls.compactMap { call in
+            guard let name = call["name"] as? String else { return nil }
+            let arguments = call["arguments"] as? String ?? ""
+            let fields = (try? JSONSerialization.jsonObject(with: Data(arguments.utf8))) as? [String: Any]
+            let path = (fields?["path"] as? String) ?? (fields?["file_path"] as? String) ?? (fields?["target_file"] as? String) ?? ""
+            let file = path.isEmpty ? "" : URL(fileURLWithPath: path).lastPathComponent
+            switch name {
+            case "search_replace", "write":
+                return TalkStep(kind: "edit", detail: file)
+            case "read_file":
+                return TalkStep(kind: "read", detail: file)
+            case "grep", "search_tool":
+                return TalkStep(kind: "search", detail: file)
+            case "run_terminal_command":
+                let command = ((fields?["command"] as? String) ?? "").split(separator: "\n").first.map(String.init) ?? ""
+                return TalkStep(kind: "run", detail: String(command.prefix(80)))
+            default:
+                return TalkStep(kind: "tool", detail: name)
+            }
+        }
+    }
+
+    /// User rows store content as text blocks. Assistant rows store a string.
+    private static func plainContent(_ value: Any?) -> String {
+        if let text = value as? String { return text }
+        guard let blocks = value as? [[String: Any]] else { return "" }
+        return blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
+    }
+
+    /// Cache rows wrap the typed message and also carry reminders. Show only the typed message.
+    private static func visibleChat(_ raw: String) -> String {
+        if let start = raw.range(of: "<user_query>"), let end = raw.range(of: "</user_query>"), start.upperBound <= end.lowerBound {
+            return String(raw[start.upperBound..<end.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.contains("<system-reminder>") || trimmed.contains("<user_info>") { return "" }
+        return trimmed
     }
 
     static func states(companyRoot: URL, room: String) -> [StaffWorkState] {
@@ -239,7 +284,8 @@ enum RoomChatService {
             "--who", who, "--message", message, "--thread", thread
         ]).text
         if !output.contains("talk ") {
-            throw CocoaError(.fileReadCorruptFile)
+            let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw RoomChatError(text: detail.isEmpty ? "send failed" : detail)
         }
     }
 
@@ -281,8 +327,11 @@ enum RoomChatService {
     }
 
     private static func python(_ companyRoot: URL, _ args: [String]) -> (text: String, code: Int32) {
-        let script = companyRoot.appendingPathComponent("system/install/work_history.py")
-        return run(["python3", script.path] + args)
+        run(["python3", mirrorScript(companyRoot: companyRoot)] + args)
+    }
+
+    private final class TextBox: @unchecked Sendable {
+        var text = ""
     }
 
     private static func run(_ command: [String]) -> (text: String, code: Int32) {
@@ -291,15 +340,29 @@ enum RoomChatService {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = Array(command.dropFirst())
         let pipe = Pipe()
+        let err = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = err
+        let outBox = TextBox()
+        let errBox = TextBox()
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global().async {
+            outBox.text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global().async {
+            errBox.text = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            group.leave()
+        }
         do {
             try process.run()
             process.waitUntilExit()
         } catch {
-            return ("", 1)
+            return (error.localizedDescription, 1)
         }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return (String(data: data, encoding: .utf8) ?? "", process.terminationStatus)
+        group.wait()
+        return (outBox.text + errBox.text, process.terminationStatus)
     }
 }

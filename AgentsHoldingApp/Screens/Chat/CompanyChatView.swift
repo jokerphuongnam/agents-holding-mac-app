@@ -20,42 +20,86 @@ private func chatClock(_ raw: String) -> String {
     return clock.string(from: parsed)
 }
 
+private struct ChatCluster: Identifiable {
+    let id: String
+    let author: String
+    let stamp: String
+    var lines: [TalkLine]
+}
+
 private struct RoomCommitList: View {
     let companyRoot: URL
     let room: String
     @State private var lines: [TalkLine] = []
     @State private var loading = true
+    @State private var draft = ""
+    @State private var queue: [Outbound] = []
+    @State private var inflight: Outbound?
+    @State private var sendError: String?
+    @State private var loadToken = 0
 
     var body: some View {
         ScrollViewReader { proxy in
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                ForEach(lines) { line in
-                    let fromUser = line.author == "user"
-                    HStack {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                ForEach(clusters) { cluster in
+                    let fromUser = cluster.author == "user"
+                    HStack(alignment: .top) {
                         if fromUser { Spacer(minLength: 48) }
-                        VStack(alignment: fromUser ? .trailing : .leading, spacing: 4) {
-                            Text(line.author)
-                                .font(.headline)
-                            Text(line.message)
-                                .multilineTextAlignment(fromUser ? .trailing : .leading)
-                            Text(chatClock(line.date))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: fromUser ? .trailing : .leading, spacing: 6) {
+                            if !fromUser {
+                                Text(cluster.author)
+                                    .font(.headline)
+                                Divider()
+                                    .frame(width: 160)
+                            }
+                            ForEach(cluster.lines) { line in
+                                VStack(alignment: fromUser ? .trailing : .leading, spacing: 4) {
+                                    if !line.steps.isEmpty {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            ForEach(Array(line.steps.enumerated()), id: \.offset) { _, step in
+                                                HStack(spacing: 6) {
+                                                    Image(systemName: phaseSymbol(step.kind))
+                                                    Text(phaseTitle(step.kind))
+                                                    if !step.detail.isEmpty {
+                                                        Text(step.detail)
+                                                            .foregroundStyle(.secondary)
+                                                            .lineLimit(1)
+                                                    }
+                                                }
+                                                .font(.caption)
+                                            }
+                                        }
+                                        .padding(.bottom, 4)
+                                    }
+                                    if !line.message.isEmpty {
+                                    Text(line.message)
+                                        .multilineTextAlignment(fromUser ? .trailing : .leading)
+                                    Text(chatClock(line.date))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(12)
+                                .background(
+                                    fromUser ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.12),
+                                    in: RoundedRectangle(cornerRadius: 8)
+                                )
+                                .id(line.id)
+                            }
                         }
-                        .padding(12)
-                        .background(
-                            fromUser ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.12),
-                            in: RoundedRectangle(cornerRadius: 8)
-                        )
                         if !fromUser { Spacer(minLength: 48) }
                     }
-                    .id(line.id)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
         }
         .defaultScrollAnchor(.bottom)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            composer
+        }
         .onChange(of: lines.last?.id) { _, id in
             guard let id else { return }
             proxy.scrollTo(id, anchor: .bottom)
@@ -69,14 +113,184 @@ private struct RoomCommitList: View {
         }
         .task(id: room) {
             loading = true
+            let token = loadToken
             let root = companyRoot
             let name = room
             let loaded = await RoomChatService.conversation(companyRoot: root, room: name)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, token == loadToken else { return }
             lines = loaded
             loading = false
         }
     }
+
+    private func phaseSymbol(_ kind: String) -> String {
+        switch kind {
+        case "thinking": return "brain"
+        case "edit": return "pencil"
+        case "read": return "doc.text"
+        case "search": return "magnifyingglass"
+        case "run": return "terminal"
+        default: return "circle"
+        }
+    }
+
+    private func phaseTitle(_ kind: String) -> String {
+        switch kind {
+        case "thinking": return L10nLookup("chat_phase_thinking", "Localizable", "Thinking")
+        case "edit": return L10nLookup("chat_phase_edit", "Localizable", "Writing edit")
+        case "read": return L10nLookup("chat_phase_read", "Localizable", "Reading")
+        case "search": return L10nLookup("chat_phase_search", "Localizable", "Searching")
+        case "run": return L10nLookup("chat_phase_run", "Localizable", "Running")
+        default: return kind
+        }
+    }
+
+    private var clusters: [ChatCluster] {
+        var grouped: [ChatCluster] = []
+        for line in lines {
+            let stamp = chatClock(line.date)
+            if let last = grouped.last, last.author == line.author, last.stamp == stamp {
+                grouped[grouped.count - 1].lines.append(line)
+            } else {
+                grouped.append(ChatCluster(id: line.id, author: line.author, stamp: stamp, lines: [line]))
+            }
+        }
+        return grouped
+    }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let inflight {
+                queueRow(inflight, waiting: false, index: nil)
+            }
+            ForEach(Array(queue.enumerated()), id: \.element.id) { index, item in
+                queueRow(item, waiting: true, index: index)
+            }
+            if let sendError {
+                Text(sendError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            HStack(spacing: 8) {
+                TextField(L10nLookup("chat_placeholder", "Localizable", "Message"), text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(enqueue)
+                Button(L10nLookup("chat_send", "Localizable", "Send"), action: enqueue)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 18)
+        .padding(.bottom, 10)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask(
+                    LinearGradient(
+                        colors: [.clear, .black, .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    private func queueRow(_ item: Outbound, waiting: Bool, index: Int?) -> some View {
+        HStack(spacing: 6) {
+            if waiting {
+                Image(systemName: "clock")
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Text(item.text)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if waiting, let index {
+                Button { moveQueue(index, by: -1) } label: { Image(systemName: "chevron.up") }
+                    .disabled(index == 0)
+                Button { moveQueue(index, by: 1) } label: { Image(systemName: "chevron.down") }
+                    .disabled(index == queue.count - 1)
+                Button { queue.remove(at: index) } label: { Image(systemName: "trash") }
+                Button(L10nLookup("chat_send_now", "Localizable", "Send now")) { sendNow(index) }
+            }
+        }
+        .font(.callout)
+    }
+
+    private func enqueue() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        draft = ""
+        sendError = nil
+        queue.append(Outbound(id: UUID(), text: text))
+        pump()
+    }
+
+    private func moveQueue(_ index: Int, by offset: Int) {
+        let target = index + offset
+        guard queue.indices.contains(target) else { return }
+        queue.swapAt(index, target)
+    }
+
+    private func sendNow(_ index: Int) {
+        guard queue.indices.contains(index) else { return }
+        let item = queue.remove(at: index)
+        Task {
+            let failed = await post(item)
+            if failed { queue.insert(item, at: 0) }
+        }
+    }
+
+    private func pump() {
+        guard inflight == nil, !queue.isEmpty else { return }
+        let next = queue.removeFirst()
+        inflight = next
+        let root = companyRoot
+        let name = room
+        Task {
+            let failed = await post(next, root: root, name: name)
+            inflight = nil
+            if failed {
+                queue.insert(next, at: 0)
+            } else {
+                pump()
+            }
+        }
+    }
+
+    @discardableResult
+    private func post(_ item: Outbound, root: URL? = nil, name: String? = nil) async -> Bool {
+        let root = root ?? companyRoot
+        let name = name ?? room
+        loadToken += 1
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let local = TalkLine(hash: item.id.uuidString, author: "user", date: stamp, thread: "ceo", message: item.text)
+        if !lines.contains(where: { $0.hash == local.hash }) {
+            lines.append(local)
+        }
+        let failure: String? = await Task.detached {
+            do {
+                try RoomChatService.say(companyRoot: root, room: name, who: "user", message: item.text, thread: "ceo")
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }.value
+        if let failure {
+            sendError = failure
+            return true
+        }
+        sendError = nil
+        return false
+    }
+}
+
+private struct Outbound: Identifiable, Equatable {
+    let id: UUID
+    var text: String
 }
 
 struct CompanyChatView: View {

@@ -28,6 +28,12 @@
 "chat_working" = "Working";
 "chat_recap" = "Recap";
 "chat_send" = "Send";
+"chat_send_now" = "Send now";
+"chat_phase_thinking" = "Thinking";
+"chat_phase_edit" = "Writing edit";
+"chat_phase_read" = "Reading";
+"chat_phase_search" = "Searching";
+"chat_phase_run" = "Running";
 "chat_placeholder" = "Message";
 "chat_thread" = "Thread";
 "chat_mirror" = "Mirror git into company history";
