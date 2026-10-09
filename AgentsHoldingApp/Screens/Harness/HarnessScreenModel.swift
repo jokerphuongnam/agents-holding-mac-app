@@ -10,7 +10,7 @@ enum HarnessScreenAction {
 
 @MainActor
 final class HarnessScreenModel: ActionScreenModel<HarnessScreenAction> {
-    override func observable(action: HarnessScreenAction) -> Effect<HarnessScreenAction> {
+    override func observable(action: HarnessScreenAction, cancel _: @escaping () -> Void) -> Effect<HarnessScreenAction> {
         guard let app else { return .none }
         switch action {
         case .setTier(let tier, let file, let name, let root):

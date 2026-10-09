@@ -16,7 +16,7 @@ enum CompanyScreenAction {
 
 @MainActor
 final class CompanyScreenModel: ActionScreenModel<CompanyScreenAction> {
-    override func observable(action: CompanyScreenAction) -> Effect<CompanyScreenAction> {
+    override func observable(action: CompanyScreenAction, cancel _: @escaping () -> Void) -> Effect<CompanyScreenAction> {
         guard let app else { return .none }
         switch action {
         case .refresh:

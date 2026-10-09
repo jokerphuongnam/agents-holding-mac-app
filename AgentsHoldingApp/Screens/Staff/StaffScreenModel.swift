@@ -19,7 +19,7 @@ enum StaffScreenAction {
 
 @MainActor
 final class StaffScreenModel: ActionScreenModel<StaffScreenAction> {
-    override func observable(action: StaffScreenAction) -> Effect<StaffScreenAction> {
+    override func observable(action: StaffScreenAction, cancel _: @escaping () -> Void) -> Effect<StaffScreenAction> {
         guard let app else { return .none }
         switch action {
         case .back:

@@ -10,7 +10,7 @@ enum HoldingScreenAction {
 
 @MainActor
 final class HoldingScreenModel: ActionScreenModel<HoldingScreenAction> {
-    override func observable(action: HoldingScreenAction) -> Effect<HoldingScreenAction> {
+    override func observable(action: HoldingScreenAction, cancel _: @escaping () -> Void) -> Effect<HoldingScreenAction> {
         guard let app else { return .none }
         switch action {
         case .openCompany(let company):

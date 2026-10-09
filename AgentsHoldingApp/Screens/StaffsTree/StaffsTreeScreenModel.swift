@@ -9,7 +9,7 @@ enum StaffsTreeAction {
 
 @MainActor
 final class StaffsTreeScreenModel: ActionScreenModel<StaffsTreeAction> {
-    override func observable(action: StaffsTreeAction) -> Effect<StaffsTreeAction> {
+    override func observable(action: StaffsTreeAction, cancel _: @escaping () -> Void) -> Effect<StaffsTreeAction> {
         guard let app else { return .none }
         switch action {
         case .add(let name, let team, let root):
