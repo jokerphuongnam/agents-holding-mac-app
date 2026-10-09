@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum StaffsTreeAction {
@@ -7,9 +8,9 @@ enum StaffsTreeAction {
 }
 
 @MainActor
-final class StaffsTreeScreenModel: ActionScreenModel<StaffsTreeAction>, ViewModel {
-    func observable(action: StaffsTreeAction) -> () -> Void {
-        guard let app else { return {} }
+final class StaffsTreeScreenModel: ActionScreenModel<StaffsTreeAction> {
+    override func observable(action: StaffsTreeAction) -> Effect<StaffsTreeAction> {
+        guard let app else { return .none }
         switch action {
         case .add(let name, let team, let root):
             app.addStaff(name: name, team: team, companyRoot: root)
@@ -18,6 +19,6 @@ final class StaffsTreeScreenModel: ActionScreenModel<StaffsTreeAction>, ViewMode
         case .open(let staff, let root, let inHolding):
             app.openStaff(staff, companyRoot: root, inHolding: inHolding)
         }
-        return {}
+        return .none
     }
 }

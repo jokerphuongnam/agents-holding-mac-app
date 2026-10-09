@@ -51,7 +51,6 @@ struct AddCompanySheet: View {
     private let catalog = TemplateCatalogService()
 
     var body: some View {
-        let _ = model.attach(appModel)
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
@@ -83,7 +82,9 @@ struct AddCompanySheet: View {
             loadCatalog()
             if projectRootPath.isEmpty { browse() }
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     private var header: some View {
         HStack {

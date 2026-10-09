@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum CodeFileScreenAction {
@@ -5,9 +6,9 @@ enum CodeFileScreenAction {
 }
 
 @MainActor
-final class CodeFileScreenModel: ActionScreenModel<CodeFileScreenAction>, ViewModel {
-    func observable(action: CodeFileScreenAction) -> () -> Void {
+final class CodeFileScreenModel: ActionScreenModel<CodeFileScreenAction> {
+    override func observable(action: CodeFileScreenAction) -> Effect<CodeFileScreenAction> {
         if case .back = action { app?.backFromCodeFile() }
-        return {}
+        return .none
     }
 }

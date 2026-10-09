@@ -7,7 +7,6 @@ struct HoldingCanvasView: View {
     @State private var showAddCompany = false
 
     var body: some View {
-        let _ = model.attach(appModel)
         Group {
             if let error = appModel.lastError, appModel.holding == nil {
                 ContentUnavailableView(
@@ -58,7 +57,9 @@ struct HoldingCanvasView: View {
             AddCompanySheet()
                 .environment(appModel)
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: 180), spacing: 12)]

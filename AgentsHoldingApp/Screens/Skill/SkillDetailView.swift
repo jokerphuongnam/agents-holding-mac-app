@@ -5,7 +5,6 @@ struct SkillDetailView: View {
     @State private var model = SkillScreenModel()
 
     var body: some View {
-        let _ = model.attach(appModel)
         Group {
             if let skill = appModel.openSkill, let path = skill.path {
                 EditableTextFileView(
@@ -18,5 +17,7 @@ struct SkillDetailView: View {
                 ContentUnavailableView(L10n.skillNotFound, systemImage: "book.closed")
             }
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 }

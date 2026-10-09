@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum AddCompanyScreenAction {
@@ -5,9 +6,9 @@ enum AddCompanyScreenAction {
 }
 
 @MainActor
-final class AddCompanyScreenModel: ActionScreenModel<AddCompanyScreenAction>, ViewModel {
-    func observable(action: AddCompanyScreenAction) -> () -> Void {
+final class AddCompanyScreenModel: ActionScreenModel<AddCompanyScreenAction> {
+    override func observable(action: AddCompanyScreenAction) -> Effect<AddCompanyScreenAction> {
         if case .reloadHolding = action { app?.reloadHolding() }
-        return {}
+        return .none
     }
 }

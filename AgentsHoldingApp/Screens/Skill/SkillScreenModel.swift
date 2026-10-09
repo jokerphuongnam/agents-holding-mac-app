@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum SkillScreenAction {
@@ -5,9 +6,9 @@ enum SkillScreenAction {
 }
 
 @MainActor
-final class SkillScreenModel: ActionScreenModel<SkillScreenAction>, ViewModel {
-    func observable(action: SkillScreenAction) -> () -> Void {
+final class SkillScreenModel: ActionScreenModel<SkillScreenAction> {
+    override func observable(action: SkillScreenAction) -> Effect<SkillScreenAction> {
         if case .back = action { app?.backFromSkill() }
-        return {}
+        return .none
     }
 }

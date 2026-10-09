@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum RootScreenAction {
@@ -10,9 +11,9 @@ enum RootScreenAction {
 }
 
 @MainActor
-final class RootScreenModel: ActionScreenModel<RootScreenAction>, ViewModel {
-    func observable(action: RootScreenAction) -> () -> Void {
-        guard let app else { return {} }
+final class RootScreenModel: ActionScreenModel<RootScreenAction> {
+    override func observable(action: RootScreenAction) -> Effect<RootScreenAction> {
+        guard let app else { return .none }
         switch action {
         case .backToHolding:
             app.backToHolding()
@@ -27,6 +28,6 @@ final class RootScreenModel: ActionScreenModel<RootScreenAction>, ViewModel {
         case .openCompanyStaff(let staff):
             app.openStaff(staff, inHolding: false)
         }
-        return {}
+        return .none
     }
 }

@@ -23,7 +23,7 @@
 "chat_open" = "Open chat";
 "chat_title" = "Chat";
 "chat_rooms" = "Rooms";
-"chat_empty" = "No rooms yet. Launch this company once to create a room.";
+"chat_empty" = "No rooms yet. Send a message to open a new one.";
 "chat_ceo" = "CEO";
 "chat_working" = "Working";
 "chat_recap" = "Recap";

@@ -20,6 +20,8 @@ packages:
   HighlightSwift:
     url: https://github.com/appstefan/HighlightSwift
     from: "1.1.0"
+  ScreenViewModel:
+    path: ScreenViewModel
 targets:
   AgentsHoldingApp:
     type: application
@@ -31,6 +33,8 @@ targets:
         product: MarkdownUI
       - package: HighlightSwift
         product: HighlightSwift
+      - package: ScreenViewModel
+        product: ScreenViewModel
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.agentsholding.app

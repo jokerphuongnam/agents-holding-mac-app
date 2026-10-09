@@ -32,16 +32,12 @@ private struct RoomCommitList: View {
     let room: String
     @State private var lines: [TalkLine] = []
     @State private var loading = true
-    @State private var draft = ""
-    @State private var queue: [Outbound] = []
-    @State private var inflight: Outbound?
-    @State private var sendError: String?
     @State private var loadToken = 0
 
     var body: some View {
         ScrollViewReader { proxy in
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
                 ForEach(clusters) { cluster in
                     let fromUser = cluster.author == "user"
                     HStack(alignment: .top) {
@@ -95,11 +91,10 @@ private struct RoomCommitList: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
             .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .defaultScrollAnchor(.bottom)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            composer
-        }
         .onChange(of: lines.last?.id) { _, id in
             guard let id else { return }
             proxy.scrollTo(id, anchor: .bottom)
@@ -112,14 +107,15 @@ private struct RoomCommitList: View {
             }
         }
         .task(id: room) {
-            loading = true
-            let token = loadToken
             let root = companyRoot
             let name = room
-            let loaded = await RoomChatService.conversation(companyRoot: root, room: name)
-            guard !Task.isCancelled, token == loadToken else { return }
-            lines = loaded
-            loading = false
+            while !Task.isCancelled {
+                let loaded = await RoomChatService.conversation(companyRoot: root, room: name)
+                if Task.isCancelled { return }
+                lines = loaded
+                loading = false
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
         }
     }
 
@@ -158,157 +154,25 @@ private struct RoomCommitList: View {
         return grouped
     }
 
-    private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let inflight {
-                queueRow(inflight, waiting: false, index: nil)
-            }
-            ForEach(Array(queue.enumerated()), id: \.element.id) { index, item in
-                queueRow(item, waiting: true, index: index)
-            }
-            if let sendError {
-                Text(sendError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            HStack(spacing: 8) {
-                TextField(L10nLookup("chat_placeholder", "Localizable", "Message"), text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(enqueue)
-                Button(L10nLookup("chat_send", "Localizable", "Send"), action: enqueue)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 18)
-        .padding(.bottom, 10)
-        .background {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .mask(
-                    LinearGradient(
-                        colors: [.clear, .black, .black],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .ignoresSafeArea(edges: .bottom)
-        }
-    }
-
-    private func queueRow(_ item: Outbound, waiting: Bool, index: Int?) -> some View {
-        HStack(spacing: 6) {
-            if waiting {
-                Image(systemName: "clock")
-                    .foregroundStyle(.secondary)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-            }
-            Text(item.text)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if waiting, let index {
-                Button { moveQueue(index, by: -1) } label: { Image(systemName: "chevron.up") }
-                    .disabled(index == 0)
-                Button { moveQueue(index, by: 1) } label: { Image(systemName: "chevron.down") }
-                    .disabled(index == queue.count - 1)
-                Button { queue.remove(at: index) } label: { Image(systemName: "trash") }
-                Button(L10nLookup("chat_send_now", "Localizable", "Send now")) { sendNow(index) }
-            }
-        }
-        .font(.callout)
-    }
-
-    private func enqueue() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        draft = ""
-        sendError = nil
-        queue.append(Outbound(id: UUID(), text: text))
-        pump()
-    }
-
-    private func moveQueue(_ index: Int, by offset: Int) {
-        let target = index + offset
-        guard queue.indices.contains(target) else { return }
-        queue.swapAt(index, target)
-    }
-
-    private func sendNow(_ index: Int) {
-        guard queue.indices.contains(index) else { return }
-        let item = queue.remove(at: index)
-        Task {
-            let failed = await post(item)
-            if failed { queue.insert(item, at: 0) }
-        }
-    }
-
-    private func pump() {
-        guard inflight == nil, !queue.isEmpty else { return }
-        let next = queue.removeFirst()
-        inflight = next
-        let root = companyRoot
-        let name = room
-        Task {
-            let failed = await post(next, root: root, name: name)
-            inflight = nil
-            if failed {
-                queue.insert(next, at: 0)
-            } else {
-                pump()
-            }
-        }
-    }
-
-    @discardableResult
-    private func post(_ item: Outbound, root: URL? = nil, name: String? = nil) async -> Bool {
-        let root = root ?? companyRoot
-        let name = name ?? room
-        loadToken += 1
-        let stamp = ISO8601DateFormatter().string(from: Date())
-        let local = TalkLine(hash: item.id.uuidString, author: "user", date: stamp, thread: "ceo", message: item.text)
-        if !lines.contains(where: { $0.hash == local.hash }) {
-            lines.append(local)
-        }
-        let failure: String? = await Task.detached {
-            do {
-                try RoomChatService.say(companyRoot: root, room: name, who: "user", message: item.text, thread: "ceo")
-                return nil
-            } catch {
-                return error.localizedDescription
-            }
-        }.value
-        if let failure {
-            sendError = failure
-            return true
-        }
-        sendError = nil
-        return false
-    }
-}
-
-private struct Outbound: Identifiable, Equatable {
-    let id: UUID
-    var text: String
 }
 
 struct CompanyChatView: View {
     let companyRoot: URL
     let projectRoot: URL?
     @State private var model = ChatScreenModel()
+    @State private var path: [String] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
-                if roomNames.isEmpty {
+                if model.rooms.isEmpty {
                     ContentUnavailableView(
                         L10nLookup("chat_rooms", "Localizable", "Rooms"),
                         systemImage: "bubble.left.and.bubble.right",
-                        description: Text(L10nLookup("chat_empty", "Localizable", "No rooms yet. Launch this company once to create a room."))
+                        description: Text(L10nLookup("chat_empty", "Localizable", "No rooms yet. Send a message to open a new one."))
                     )
                 } else {
-                    List(roomNames, id: \.self) { name in
+                    List(model.rooms, id: \.self) { name in
                         NavigationLink(value: name) {
                             Text(name)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,7 +181,12 @@ struct CompanyChatView: View {
                         }
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                     }
+                    .contentMargins(.bottom, 72, for: .scrollContent)
                 }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                roomComposer
             }
             .navigationTitle(L10nLookup("chat_rooms", "Localizable", "Rooms"))
             .toolbar {
@@ -344,13 +213,55 @@ struct CompanyChatView: View {
         .onAppear {
             model.companyRoot = companyRoot
             model.projectRoot = projectRoot
-            model.rooms = roomNames
             model.send(.reload)
+        }
+        .onChange(of: model.openedRoom) { _, name in
+            guard let name else { return }
+            path.append(name)
+            model.openedRoom = nil
+        }
+}
+
+    private var roomComposer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.opening {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            if let openError = model.failure {
+                Text(openError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            HStack(spacing: 8) {
+                TextField(L10nLookup("chat_placeholder", "Localizable", "Message"), text: $model.draft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(openFreshRoom)
+                Button(L10nLookup("chat_send", "Localizable", "Send"), action: openFreshRoom)
+                    .disabled(model.opening || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || projectRoot == nil)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 18)
+        .padding(.bottom, 10)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask(
+                    LinearGradient(
+                        colors: [.clear, .black, .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 
-    private var roomNames: [String] {
-        RoomChatService.rooms(companyRoot: companyRoot)
+    private func openFreshRoom() {
+        guard let projectRoot else { return }
+        model.projectRoot = projectRoot
+        model.send(.openFresh(message: model.draft, project: projectRoot))
     }
 
     private var roomTranscript: some View {

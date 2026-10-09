@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum StaffScreenAction {
@@ -17,9 +18,9 @@ enum StaffScreenAction {
 }
 
 @MainActor
-final class StaffScreenModel: ActionScreenModel<StaffScreenAction>, ViewModel {
-    func observable(action: StaffScreenAction) -> () -> Void {
-        guard let app else { return {} }
+final class StaffScreenModel: ActionScreenModel<StaffScreenAction> {
+    override func observable(action: StaffScreenAction) -> Effect<StaffScreenAction> {
+        guard let app else { return .none }
         switch action {
         case .back:
             app.backFromStaff()
@@ -48,6 +49,6 @@ final class StaffScreenModel: ActionScreenModel<StaffScreenAction>, ViewModel {
         case .fail(let message):
             app.lastError = message
         }
-        return {}
+        return .none
     }
 }

@@ -42,7 +42,7 @@ private struct PathFencePicker: View {
         }
         .padding(20)
         .frame(width: 440)
-    }
+}
 
     private var dropZone: some View {
         Text(L10n.pathFenceDrop)
@@ -92,7 +92,6 @@ struct StaffDetailView: View {
     @State private var fenceDenied: [String] = []
 
     var body: some View {
-        let _ = model.attach(appModel)
         Group {
             if let detail = appModel.staffDetail {
                 ScrollView {
@@ -199,7 +198,9 @@ struct StaffDetailView: View {
                 ContentUnavailableView(L10n.staffNotFound, systemImage: "person.slash")
             }
         }
-    }
+            .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     private func header(_ detail: StaffDetail) -> some View {
         VStack(alignment: .leading, spacing: 8) {

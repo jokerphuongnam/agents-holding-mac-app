@@ -52,7 +52,7 @@ enum RoomChatService {
                 guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
                       !isDirectory.boolValue else { continue }
                 let relative = url.path.replacingOccurrences(of: heads.path + "/", with: "")
-                if !relative.isEmpty { names.insert(relative) }
+                if !relative.isEmpty, !relative.contains("/staff/") { names.insert(relative) }
             }
         }
         if let packed = try? String(contentsOf: store.appendingPathComponent("packed-refs"), encoding: .utf8) {
@@ -60,7 +60,7 @@ enum RoomChatService {
                 let text = String(line)
                 guard let range = text.range(of: "refs/heads/room/") else { continue }
                 let name = String(text[range.upperBound...])
-                if !name.isEmpty { names.insert(name) }
+                if !name.isEmpty, !name.contains("/staff/") { names.insert(name) }
             }
         }
         return names.sorted()
@@ -69,7 +69,8 @@ enum RoomChatService {
     static func talk(companyRoot: URL, room: String) -> [TalkLine] {
         let output = python(companyRoot, ["talk", "--company", companyRoot.path, "--room-name", room]).text
         var lines: [TalkLine] = []
-        for block in output.components(separatedBy: "\n---\n") {
+        let chunks = output.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n---\n")
+        for block in chunks {
             var hash = ""
             var author = ""
             var date = ""
@@ -110,7 +111,7 @@ enum RoomChatService {
                 else if line.hasPrefix("author-date ") { date = String(line.dropFirst(12)) }
                 else if line.hasPrefix("message ") { message = String(line.dropFirst(8)) }
             }
-            if !hash.isEmpty {
+            if !hash.isEmpty, message != "room start" {
                 lines.append(TalkLine(hash: hash, author: author, date: date, thread: "ceo", message: message))
             }
         }
@@ -127,26 +128,13 @@ enum RoomChatService {
     }
 
     private static func assemble(companyRoot: URL, room: String) async -> [TalkLine] {
-        let history = commits(companyRoot: companyRoot, room: room)
-        async let spoken = Task.detached { talk(companyRoot: companyRoot, room: room) }.value
-        async let cache = Task.detached { cachedChat() }.value
-        let attributed = await withTaskGroup(of: [TalkLine].self) { group in
-            for commit in history {
-                let commit = commit
-                group.addTask {
-                    [TalkLine(hash: commit.hash, author: "user", date: commit.date, thread: "ceo", message: commit.message)]
-                }
-            }
-            var gathered: [TalkLine] = []
-            for await chunk in group {
-                gathered.append(contentsOf: chunk)
-            }
-            return gathered
+        let spoken = talk(companyRoot: companyRoot, room: room)
+        let spokenMessages = Set(spoken.map { $0.message })
+        let history = commits(companyRoot: companyRoot, room: room).compactMap { commit -> TalkLine? in
+            if spokenMessages.contains(commit.message) { return nil }
+            return TalkLine(hash: commit.hash, author: "user", date: commit.date, thread: "ceo", message: commit.message)
         }
-        var lines = attributed
-        lines.append(contentsOf: await spoken)
-        lines.append(contentsOf: await cache)
-        return lines.sorted { left, right in
+        return (history + spoken).sorted { left, right in
             if left.date != right.date { return left.date < right.date }
             let leftUser = left.author == "user"
             let rightUser = right.author == "user"
@@ -276,6 +264,76 @@ enum RoomChatService {
             guard parts.count == 3 else { return nil }
             return StaffWorkState(staff: parts[0], state: parts[1], message: parts[2])
         }
+    }
+
+    /// Creates a room branch and its CEO worktree, then stores the user message on that room.
+    static func startRoom(companyRoot: URL, projectRoot: URL, message: String) throws -> String {
+        let stem = companyRoot.lastPathComponent.replacingOccurrences(of: "-company", with: "")
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyyMMdd-HHmmss"
+        let name = "\(stem.isEmpty ? "room" : stem)-\(stamp.string(from: Date()))"
+        let parent = projectRoot.deletingLastPathComponent().appendingPathComponent(".company-rooms")
+        let created = python(companyRoot, [
+            "ensure-room",
+            "--company", companyRoot.path,
+            "--source", projectRoot.path,
+            "--room-name", name,
+            "--dest-parent", parent.path
+        ])
+        if created.code != 0 {
+            let detail = created.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw RoomChatError(text: detail.isEmpty ? "room failed" : detail)
+        }
+        let launch = companyRoot.appendingPathComponent("launch.sh")
+        guard FileManager.default.fileExists(atPath: launch.path) else {
+            throw RoomChatError(text: "launch.sh is missing")
+        }
+        let runtime = defaultRuntime(companyRoot: companyRoot)
+        let logURL = companyRoot.appendingPathComponent("cache/launch-\(name).log")
+        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        let log = try FileHandle(forWritingTo: logURL)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [launch.path, runtime, "--worktree-name", name, message]
+        process.currentDirectoryURL = projectRoot
+        var env = ProcessInfo.processInfo.environment
+        let home = NSHomeDirectory()
+        let extra = "/opt/homebrew/bin:/usr/local/bin:\(home)/bin:\(home)/.local/bin"
+        env["PATH"] = extra + ":" + (env["PATH"] ?? "/usr/bin:/bin")
+        process.environment = env
+        process.standardOutput = log
+        process.standardError = log
+        do {
+            try process.run()
+        } catch {
+            throw RoomChatError(text: error.localizedDescription)
+        }
+        let talkRef = companyRoot.appendingPathComponent("cache/work-history/refs/heads/talk/\(name)")
+        let deadline = Date().addingTimeInterval(20)
+        while !FileManager.default.fileExists(atPath: talkRef.path), Date() < deadline {
+            if !process.isRunning {
+                let detail = (try? String(contentsOf: logURL, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                throw RoomChatError(text: detail.isEmpty ? "launch failed" : detail)
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return name
+    }
+
+    private static func defaultRuntime(companyRoot: URL) -> String {
+        let router = companyRoot.appendingPathComponent("system/harness/runtime_router.toml")
+        guard let text = try? String(contentsOf: router, encoding: .utf8) else { return "grok" }
+        var inDefault = false
+        for raw in text.split(separator: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") { inDefault = line == "[default]" }
+            guard inDefault, line.hasPrefix("runtime") else { continue }
+            let value = line.split(separator: "=", maxSplits: 1).last.map(String.init) ?? ""
+            let runtime = value.replacingOccurrences(of: "\"", with: "").trimmingCharacters(in: .whitespaces)
+            if !runtime.isEmpty { return runtime }
+        }
+        return "grok"
     }
 
     static func say(companyRoot: URL, room: String, who: String, message: String, thread: String) throws {

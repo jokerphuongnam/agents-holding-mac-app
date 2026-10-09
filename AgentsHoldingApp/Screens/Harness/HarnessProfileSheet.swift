@@ -20,7 +20,6 @@ struct HarnessProfileSheet: View {
     private var vendors: [String] { modes.map(\.mode).filter { $0 != "merge" } }
 
     var body: some View {
-        let _ = model.attach(appModel)
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -116,7 +115,9 @@ struct HarnessProfileSheet: View {
             model.send(.setRuntime(newValue, staff: detail.node.name, companyRoot: detail.companyRoot))
             reload(fromDisk: false)
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     @ViewBuilder
     private func runtimeControl(_ row: HarnessModeProfile) -> some View {

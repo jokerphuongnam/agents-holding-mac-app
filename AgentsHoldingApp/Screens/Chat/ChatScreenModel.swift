@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum ChatScreenAction {
@@ -6,10 +7,14 @@ enum ChatScreenAction {
     case chooseThread(String)
     case send
     case mirror
+    case mirrorFinished(String?)
+    case openFresh(message: String, project: URL)
+    case freshOpened(String)
+    case freshFailed(message: String, error: String)
 }
 
 @MainActor
-final class ChatScreenModel: ActionScreenModel<ChatScreenAction>, ViewModel {
+final class ChatScreenModel: ActionScreenModel<ChatScreenAction> {
     var companyRoot: URL?
     var projectRoot: URL?
     var mirroring = false
@@ -19,6 +24,8 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction>, ViewModel {
     var states: [StaffWorkState] = []
     var thread = "ceo"
     var draft = ""
+    var opening = false
+    var openedRoom: String?
     var failure: String?
 
     var threads: [String] {
@@ -41,8 +48,8 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction>, ViewModel {
         !states.isEmpty && states.contains { !$0.isDone }
     }
 
-    func observable(action: ChatScreenAction) -> () -> Void {
-        guard let companyRoot else { return {} }
+    override func observable(action: ChatScreenAction) -> Effect<ChatScreenAction> {
+        guard let companyRoot else { return .none }
         switch action {
         case .reload:
             rooms = RoomChatService.rooms(companyRoot: companyRoot)
@@ -53,21 +60,55 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction>, ViewModel {
             let trimmed = name.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty { thread = trimmed }
         case .mirror:
-            guard let source = mirrorSource, !mirroring else { return {} }
+            guard let source = mirrorSource, !mirroring else { return .none }
             mirroring = true
             failure = nil
             let company = companyRoot
-            Task { @MainActor in
+            return .task(.userInitiated) { send in
                 let problem = await Task.detached(priority: .userInitiated) {
                     RoomChatService.mirror(companyRoot: company, source: source)
                 }.value
-                self.mirroring = false
-                self.failure = problem
-                self.rooms = RoomChatService.rooms(companyRoot: company)
+                send(.mirrorFinished(problem))
             }
-            return {}
+        case .mirrorFinished(let problem):
+            mirroring = false
+            failure = problem
+            rooms = RoomChatService.rooms(companyRoot: companyRoot)
+            return .none
+        case .openFresh(let message, let project):
+            let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, !opening else { return .none }
+            opening = true
+            failure = nil
+            draft = ""
+            let company = companyRoot
+            return .task(.userInitiated) { send in
+                let result: Result<String, Error> = await Task.detached(priority: .userInitiated) {
+                    do {
+                        return .success(try RoomChatService.startRoom(companyRoot: company, projectRoot: project, message: text))
+                    } catch {
+                        return .failure(error)
+                    }
+                }.value
+                switch result {
+                case .success(let name):
+                    send(.freshOpened(name))
+                case .failure(let error):
+                    send(.freshFailed(message: text, error: error.localizedDescription))
+                }
+            }
+        case .freshOpened(let name):
+            opening = false
+            rooms = RoomChatService.rooms(companyRoot: companyRoot)
+            openedRoom = name
+            return .none
+        case .freshFailed(let message, let error):
+            opening = false
+            draft = message
+            failure = error
+            return .none
         case .send:
-            guard let room, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return {} }
+            guard let room, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .none }
             do {
                 try RoomChatService.say(
                     companyRoot: companyRoot,
@@ -83,7 +124,7 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction>, ViewModel {
                 failure = error.localizedDescription
             }
         }
-        return {}
+        return .none
     }
 
     func open(_ name: String) {

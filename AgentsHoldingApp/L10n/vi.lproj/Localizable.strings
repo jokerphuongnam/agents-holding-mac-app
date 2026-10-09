@@ -23,7 +23,7 @@
 "chat_open" = "Mở chat";
 "chat_title" = "Chat";
 "chat_rooms" = "Room";
-"chat_empty" = "Chưa có room. Launch company một lần để tạo room.";
+"chat_empty" = "Chưa có room. Gửi tin nhắn để mở room mới.";
 "chat_ceo" = "CEO";
 "chat_working" = "Đang làm";
 "chat_recap" = "Recap";

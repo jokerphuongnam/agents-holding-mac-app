@@ -24,7 +24,6 @@ struct CompanyCanvasView: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        let _ = model.attach(appModel)
         Group {
             if let snap = appModel.openCompany {
                 ScrollViewReader { proxy in
@@ -84,7 +83,9 @@ struct CompanyCanvasView: View {
                 )
             }
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: 160), spacing: 12)]

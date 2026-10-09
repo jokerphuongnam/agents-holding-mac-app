@@ -48,7 +48,6 @@ struct StaffsTreeView: View {
     }
 
     var body: some View {
-        let _ = model.attach(appModel)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 if showsHeading {
@@ -75,7 +74,9 @@ struct StaffsTreeView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     private var graphViewport: some View {
         GeometryReader { geo in

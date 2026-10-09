@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum SettingsScreenAction {
@@ -5,13 +6,13 @@ enum SettingsScreenAction {
 }
 
 @MainActor
-final class SettingsScreenModel: ActionScreenModel<SettingsScreenAction>, ViewModel {
-    func observable(action: SettingsScreenAction) -> () -> Void {
-        guard let app else { return {} }
+final class SettingsScreenModel: ActionScreenModel<SettingsScreenAction> {
+    override func observable(action: SettingsScreenAction) -> Effect<SettingsScreenAction> {
+        guard let app else { return .none }
         switch action {
         case .reload:
             app.reloadHolding()
         }
-        return {}
+        return .none
     }
 }

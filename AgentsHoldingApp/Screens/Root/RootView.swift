@@ -6,7 +6,6 @@ struct RootView: View {
     @State private var model = RootScreenModel()
 
     var body: some View {
-        let _ = model.attach(appModel)
         NavigationSplitView {
             SidebarView(model: model)
         } detail: {
@@ -30,7 +29,9 @@ struct RootView: View {
                 LanguagePickerButton()
             }
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     @ViewBuilder
     private var detail: some View {

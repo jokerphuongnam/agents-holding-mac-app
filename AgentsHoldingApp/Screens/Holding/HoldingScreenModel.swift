@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum HoldingScreenAction {
@@ -8,9 +9,9 @@ enum HoldingScreenAction {
 }
 
 @MainActor
-final class HoldingScreenModel: ActionScreenModel<HoldingScreenAction>, ViewModel {
-    func observable(action: HoldingScreenAction) -> () -> Void {
-        guard let app else { return {} }
+final class HoldingScreenModel: ActionScreenModel<HoldingScreenAction> {
+    override func observable(action: HoldingScreenAction) -> Effect<HoldingScreenAction> {
+        guard let app else { return .none }
         switch action {
         case .openCompany(let company):
             app.openCompanyNode(company)
@@ -21,6 +22,6 @@ final class HoldingScreenModel: ActionScreenModel<HoldingScreenAction>, ViewMode
         case .chooseScanFolder:
             app.chooseCompanyScanFolder()
         }
-        return {}
+        return .none
     }
 }

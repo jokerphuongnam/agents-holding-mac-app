@@ -7,7 +7,6 @@ struct SettingsView: View {
     @AppStorage("holdingPath") private var holdingPath: String = ""
 
     var body: some View {
-        let _ = model.attach(appModel)
         Form {
             Section(L10n.languageSection) {
                 Picker(L10n.languagePicker, selection: $languageStore.language) {
@@ -40,5 +39,7 @@ struct SettingsView: View {
         }
         .padding()
         .frame(width: 520)
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 }

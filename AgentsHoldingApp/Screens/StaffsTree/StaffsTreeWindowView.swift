@@ -12,7 +12,6 @@ struct StaffsTreeWindowView: View {
     }
 
     var body: some View {
-        let _ = model.attach(appModel)
         StaffsTreeView(
             roots: StaffDirectory().buildStaffTree(companyRoot: companyRoot),
             showsHeading: true,
@@ -31,7 +30,9 @@ struct StaffsTreeWindowView: View {
                 dismissWindow(id: "staffs-tree")
             }
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 }
 
 /// Placeholder when `WindowGroup` opens with a nil value — close immediately.

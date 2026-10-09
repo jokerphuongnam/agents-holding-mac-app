@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum HarnessScreenAction {
@@ -8,9 +9,9 @@ enum HarnessScreenAction {
 }
 
 @MainActor
-final class HarnessScreenModel: ActionScreenModel<HarnessScreenAction>, ViewModel {
-    func observable(action: HarnessScreenAction) -> () -> Void {
-        guard let app else { return {} }
+final class HarnessScreenModel: ActionScreenModel<HarnessScreenAction> {
+    override func observable(action: HarnessScreenAction) -> Effect<HarnessScreenAction> {
+        guard let app else { return .none }
         switch action {
         case .setTier(let tier, let file, let name, let root):
             app.setStaffTier(tier, staffFile: file, name: name, companyRoot: root)
@@ -21,6 +22,6 @@ final class HarnessScreenModel: ActionScreenModel<HarnessScreenAction>, ViewMode
         case .setMapping(let runtime, let tier, let model, let effort, let root):
             app.setHarnessTier(runtime: runtime, tier: tier, model: model, effort: effort, companyRoot: root)
         }
-        return {}
+        return .none
     }
 }

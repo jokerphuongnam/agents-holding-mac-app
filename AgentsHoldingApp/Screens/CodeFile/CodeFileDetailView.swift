@@ -8,7 +8,6 @@ struct CodeFileDetailView: View {
     @State private var model = CodeFileScreenModel()
 
     var body: some View {
-        let _ = model.attach(appModel)
         Group {
             if let file = appModel.openCodeFile {
                 EditableTextFileView(
@@ -22,7 +21,9 @@ struct CodeFileDetailView: View {
                 ContentUnavailableView(L10n.fileNotFound, systemImage: "doc.questionmark")
             }
         }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 }
 
 /// Read a company file, edit it, and write it back in place.

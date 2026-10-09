@@ -1,3 +1,4 @@
+import ScreenViewModel
 import Foundation
 
 enum CompanyScreenAction {
@@ -14,9 +15,9 @@ enum CompanyScreenAction {
 }
 
 @MainActor
-final class CompanyScreenModel: ActionScreenModel<CompanyScreenAction>, ViewModel {
-    func observable(action: CompanyScreenAction) -> () -> Void {
-        guard let app else { return {} }
+final class CompanyScreenModel: ActionScreenModel<CompanyScreenAction> {
+    override func observable(action: CompanyScreenAction) -> Effect<CompanyScreenAction> {
+        guard let app else { return .none }
         switch action {
         case .refresh:
             app.refreshOpenCompany()
@@ -39,6 +40,6 @@ final class CompanyScreenModel: ActionScreenModel<CompanyScreenAction>, ViewMode
         case .addStaff(let name, let team, let root):
             app.addStaff(name: name, team: team, companyRoot: root)
         }
-        return {}
+        return .none
     }
 }

@@ -25,7 +25,6 @@ struct UsageView: View {
     private let chartAnimation = Animation.easeOut(duration: 0.85)
 
     var body: some View {
-        let _ = model.attach(appModel)
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -74,7 +73,9 @@ struct UsageView: View {
         }
         .onChange(of: bucket) { _, _ in reaggregate() }
         .onChange(of: chartKind) { _, _ in replayChartAnimation() }
-    }
+        .onAppear { model.attach(appModel) }
+        .onDisappear { model.disappear() }
+}
 
     private var usageTitle: String {
         if let staff = appModel.usageScope.staffName {
