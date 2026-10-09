@@ -84,7 +84,6 @@ struct CompanyCanvasView: View {
             }
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     private var columns: [GridItem] {

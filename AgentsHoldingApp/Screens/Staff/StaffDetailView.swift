@@ -199,7 +199,6 @@ struct StaffDetailView: View {
             }
         }
             .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     private func header(_ detail: StaffDetail) -> some View {

@@ -18,6 +18,5 @@ struct SkillDetailView: View {
             }
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 }

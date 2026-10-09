@@ -75,7 +75,6 @@ struct StaffsTreeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     private var graphViewport: some View {

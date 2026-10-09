@@ -205,7 +205,7 @@ struct CompanyChatView: View {
                     .onAppear {
                         model.companyRoot = companyRoot
                         model.projectRoot = projectRoot
-                        model.open(name)
+                        model.send(.selectRoom(name))
                     }
             }
         }
@@ -354,7 +354,7 @@ struct CompanyChatView: View {
             Button(L10nLookup("chat_send", "Localizable", "Send")) {
                 model.send(.send)
             }
-            .disabled(model.room == nil || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(model.opening || model.room == nil || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 }

@@ -11,6 +11,8 @@ enum ChatScreenAction {
     case openFresh(message: String, project: URL)
     case freshOpened(String)
     case freshFailed(message: String, error: String)
+    case wakeFailed(String)
+    case sent
 }
 
 @MainActor
@@ -56,6 +58,16 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction> {
             loadRoom()
         case .selectRoom(let name):
             open(name)
+            guard let projectRoot else { return .none }
+            let company = companyRoot
+            let project = projectRoot
+            return .task(.utility, id: "resume-\(name)") { send in
+                do {
+                    try RoomChatService.resumeRoom(companyRoot: company, projectRoot: project, room: name, message: nil)
+                } catch {
+                    send(.wakeFailed(error.localizedDescription))
+                }
+            }
         case .chooseThread(let name):
             let trimmed = name.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty { thread = trimmed }
@@ -108,21 +120,30 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction> {
             failure = error
             return .none
         case .send:
-            guard let room, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .none }
-            do {
-                try RoomChatService.say(
-                    companyRoot: companyRoot,
-                    room: room,
-                    who: "user",
-                    message: draft.trimmingCharacters(in: .whitespacesAndNewlines),
-                    thread: thread
-                )
-                draft = ""
-                failure = nil
-                loadRoom()
-            } catch {
-                failure = error.localizedDescription
+            let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let room, let projectRoot, !text.isEmpty, !opening else { return .none }
+            opening = true
+            failure = nil
+            draft = ""
+            let company = companyRoot
+            let project = projectRoot
+            let name = room
+            return .task(.userInitiated, id: "send-\(name)") { send in
+                do {
+                    try RoomChatService.resumeRoom(companyRoot: company, projectRoot: project, room: name, message: text)
+                    send(.sent)
+                } catch {
+                    send(.freshFailed(message: text, error: error.localizedDescription))
+                }
             }
+        case .sent:
+            opening = false
+            failure = nil
+            loadRoom()
+            return .none
+        case .wakeFailed(let error):
+            failure = error
+            return .none
         }
         return .none
     }

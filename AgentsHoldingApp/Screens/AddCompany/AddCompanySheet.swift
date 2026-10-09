@@ -83,7 +83,6 @@ struct AddCompanySheet: View {
             if projectRootPath.isEmpty { browse() }
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     private var header: some View {

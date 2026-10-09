@@ -74,7 +74,6 @@ struct UsageView: View {
         .onChange(of: bucket) { _, _ in reaggregate() }
         .onChange(of: chartKind) { _, _ in replayChartAnimation() }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     private var usageTitle: String {

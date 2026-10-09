@@ -266,36 +266,52 @@ enum RoomChatService {
         }
     }
 
-    /// Creates a room branch and its CEO worktree, then stores the user message on that room.
+    /// `launch.sh` creates the room branch, checks out the CEO worktree, and starts the agent.
     static func startRoom(companyRoot: URL, projectRoot: URL, message: String) throws -> String {
         let stem = companyRoot.lastPathComponent.replacingOccurrences(of: "-company", with: "")
         let stamp = DateFormatter()
         stamp.locale = Locale(identifier: "en_US_POSIX")
         stamp.dateFormat = "yyyyMMdd-HHmmss"
         let name = "\(stem.isEmpty ? "room" : stem)-\(stamp.string(from: Date()))"
-        let parent = projectRoot.deletingLastPathComponent().appendingPathComponent(".company-rooms")
-        let created = python(companyRoot, [
-            "ensure-room",
-            "--company", companyRoot.path,
-            "--source", projectRoot.path,
-            "--room-name", name,
-            "--dest-parent", parent.path
-        ])
-        if created.code != 0 {
-            let detail = created.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw RoomChatError(text: detail.isEmpty ? "room failed" : detail)
-        }
+        try launchAgent(companyRoot: companyRoot, projectRoot: projectRoot, room: name, message: message, resume: false)
+        return name
+    }
+
+    /// Reopens an existing room the same way: branch, CEO worktree, then the agent.
+    static func resumeRoom(companyRoot: URL, projectRoot: URL, room: String, message: String?) throws {
+        try launchAgent(companyRoot: companyRoot, projectRoot: projectRoot, room: room, message: message, resume: true)
+    }
+
+    private static func launchAgent(
+        companyRoot: URL,
+        projectRoot: URL,
+        room: String,
+        message: String?,
+        resume: Bool
+    ) throws {
         let launch = companyRoot.appendingPathComponent("launch.sh")
         guard FileManager.default.fileExists(atPath: launch.path) else {
             throw RoomChatError(text: "launch.sh is missing")
         }
         let runtime = defaultRuntime(companyRoot: companyRoot)
-        let logURL = companyRoot.appendingPathComponent("cache/launch-\(name).log")
-        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        let logURL = companyRoot.appendingPathComponent("cache/launch-\(room).log")
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+        let before = (try? String(contentsOf: logURL, encoding: .utf8))?.count ?? 0
         let log = try FileHandle(forWritingTo: logURL)
+        log.seekToEndOfFile()
+        var arguments = [launch.path, runtime]
+        if resume {
+            arguments.append(contentsOf: ["--continue", room])
+        } else {
+            arguments.append(contentsOf: ["--worktree-name", room])
+        }
+        let text = message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !text.isEmpty { arguments.append(text) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [launch.path, runtime, "--worktree-name", name, message]
+        process.arguments = arguments
         process.currentDirectoryURL = projectRoot
         var env = ProcessInfo.processInfo.environment
         let home = NSHomeDirectory()
@@ -309,16 +325,22 @@ enum RoomChatService {
         } catch {
             throw RoomChatError(text: error.localizedDescription)
         }
-        let talkRef = companyRoot.appendingPathComponent("cache/work-history/refs/heads/talk/\(name)")
+        guard !text.isEmpty else { return }
+        let talkRef = companyRoot.appendingPathComponent("cache/work-history/refs/heads/talk/\(room)")
         let deadline = Date().addingTimeInterval(20)
-        while !FileManager.default.fileExists(atPath: talkRef.path), Date() < deadline {
+        while Date() < deadline {
+            let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            let fresh = logText.count > before ? String(logText.dropFirst(before)) : ""
+            if FileManager.default.fileExists(atPath: talkRef.path), fresh.contains("talk ") || !resume {
+                if !resume && FileManager.default.fileExists(atPath: talkRef.path) { return }
+                if resume && fresh.contains("talk ") { return }
+            }
             if !process.isRunning {
-                let detail = (try? String(contentsOf: logURL, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let detail = fresh.trimmingCharacters(in: .whitespacesAndNewlines)
                 throw RoomChatError(text: detail.isEmpty ? "launch failed" : detail)
             }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        return name
     }
 
     private static func defaultRuntime(companyRoot: URL) -> String {

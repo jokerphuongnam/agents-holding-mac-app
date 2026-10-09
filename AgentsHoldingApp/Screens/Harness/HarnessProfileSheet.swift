@@ -116,7 +116,6 @@ struct HarnessProfileSheet: View {
             reload(fromDisk: false)
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     @ViewBuilder

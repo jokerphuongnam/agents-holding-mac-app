@@ -58,7 +58,6 @@ struct HoldingCanvasView: View {
                 .environment(appModel)
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 
     private var columns: [GridItem] {

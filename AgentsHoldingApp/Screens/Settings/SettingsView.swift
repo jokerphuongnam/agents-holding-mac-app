@@ -40,6 +40,5 @@ struct SettingsView: View {
         .padding()
         .frame(width: 520)
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 }

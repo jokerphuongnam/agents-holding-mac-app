@@ -22,7 +22,6 @@ struct CodeFileDetailView: View {
             }
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 }
 

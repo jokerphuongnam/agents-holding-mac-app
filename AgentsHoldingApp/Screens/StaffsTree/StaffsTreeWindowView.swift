@@ -31,7 +31,6 @@ struct StaffsTreeWindowView: View {
             }
         }
         .onAppear { model.attach(appModel) }
-        .onDisappear { model.disappear() }
 }
 }
 
