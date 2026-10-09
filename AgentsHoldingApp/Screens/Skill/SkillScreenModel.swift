@@ -7,7 +7,7 @@ enum SkillScreenAction {
 
 @MainActor
 final class SkillScreenModel: ActionScreenModel<SkillScreenAction> {
-    override func observable(action: SkillScreenAction, cancel _: @escaping () -> Void) -> Effect<SkillScreenAction> {
+    override func observable(action: SkillScreenAction, cancel _: Cancel) -> Effect<SkillScreenAction> {
         if case .back = action { app?.backFromSkill() }
         return .none
     }

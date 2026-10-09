@@ -48,7 +48,7 @@ final class ChatScreenModel: ActionScreenModel<ChatScreenAction> {
         !states.isEmpty && states.contains { !$0.isDone }
     }
 
-    override func observable(action: ChatScreenAction, cancel _: @escaping () -> Void) -> Effect<ChatScreenAction> {
+    override func observable(action: ChatScreenAction, cancel _: Cancel) -> Effect<ChatScreenAction> {
         guard let companyRoot else { return .none }
         switch action {
         case .reload:

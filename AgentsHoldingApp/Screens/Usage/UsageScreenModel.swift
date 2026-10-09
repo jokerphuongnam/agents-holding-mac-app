@@ -7,7 +7,7 @@ enum UsageScreenAction {
 
 @MainActor
 final class UsageScreenModel: ActionScreenModel<UsageScreenAction> {
-    override func observable(action: UsageScreenAction, cancel _: @escaping () -> Void) -> Effect<UsageScreenAction> {
+    override func observable(action: UsageScreenAction, cancel _: Cancel) -> Effect<UsageScreenAction> {
         if case .back = action { app?.backFromUsage() }
         return .none
     }

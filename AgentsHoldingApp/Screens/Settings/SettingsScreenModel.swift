@@ -7,7 +7,7 @@ enum SettingsScreenAction {
 
 @MainActor
 final class SettingsScreenModel: ActionScreenModel<SettingsScreenAction> {
-    override func observable(action: SettingsScreenAction, cancel _: @escaping () -> Void) -> Effect<SettingsScreenAction> {
+    override func observable(action: SettingsScreenAction, cancel _: Cancel) -> Effect<SettingsScreenAction> {
         guard let app else { return .none }
         switch action {
         case .reload:

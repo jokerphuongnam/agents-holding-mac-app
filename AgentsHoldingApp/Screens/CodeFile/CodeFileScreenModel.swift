@@ -7,7 +7,7 @@ enum CodeFileScreenAction {
 
 @MainActor
 final class CodeFileScreenModel: ActionScreenModel<CodeFileScreenAction> {
-    override func observable(action: CodeFileScreenAction, cancel _: @escaping () -> Void) -> Effect<CodeFileScreenAction> {
+    override func observable(action: CodeFileScreenAction, cancel _: Cancel) -> Effect<CodeFileScreenAction> {
         if case .back = action { app?.backFromCodeFile() }
         return .none
     }

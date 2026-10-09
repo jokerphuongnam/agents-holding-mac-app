@@ -12,7 +12,7 @@ enum RootScreenAction {
 
 @MainActor
 final class RootScreenModel: ActionScreenModel<RootScreenAction> {
-    override func observable(action: RootScreenAction, cancel _: @escaping () -> Void) -> Effect<RootScreenAction> {
+    override func observable(action: RootScreenAction, cancel _: Cancel) -> Effect<RootScreenAction> {
         guard let app else { return .none }
         switch action {
         case .backToHolding:

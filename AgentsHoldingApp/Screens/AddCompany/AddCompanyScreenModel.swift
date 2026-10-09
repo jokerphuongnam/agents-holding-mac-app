@@ -7,7 +7,7 @@ enum AddCompanyScreenAction {
 
 @MainActor
 final class AddCompanyScreenModel: ActionScreenModel<AddCompanyScreenAction> {
-    override func observable(action: AddCompanyScreenAction, cancel _: @escaping () -> Void) -> Effect<AddCompanyScreenAction> {
+    override func observable(action: AddCompanyScreenAction, cancel _: Cancel) -> Effect<AddCompanyScreenAction> {
         if case .reloadHolding = action { app?.reloadHolding() }
         return .none
     }
